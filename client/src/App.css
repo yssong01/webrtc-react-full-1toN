@@ -1,0 +1,398 @@
+/* 화면 전체 컨테이너 */
+.app-root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f5f5f5;
+}
+
+/* 상단: 방 정보 + 입장 + 화상 시작 */
+.top-bar {
+  padding: 8px 16px;
+  border-bottom: 1px solid #ccc;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.top-bar-title {
+  font-weight: 700;
+  margin-right: 12px;
+}
+
+.top-bar label {
+  font-size: 0.85rem;
+}
+
+.top-bar input {
+  padding: 4px 8px;
+  margin-left: 4px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  font-size: 0.85rem;
+  width: 90px; /* 이전에 줄여둔 폭 */
+}
+
+.top-bar button {
+  margin-left: 4px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  border: none;
+  background: #4a7bd4;
+  color: #fff;
+  cursor: pointer;
+}
+
+.top-bar button:hover {
+  background: #3862af;
+}
+
+/* 🔊 마이크 버튼 (아이콘 + 토글 색상) */
+.top-bar .mic-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  width: 32px;
+  height: 32px;
+  background: #4a7bd4;
+}
+
+.top-bar .mic-btn:hover {
+  background: #3862af;
+}
+
+/* 마이크 아이콘 기본 모양 */
+.mic-icon {
+  position: relative;
+  width: 14px;
+  height: 18px;
+  border-radius: 7px;
+  border: 2px solid #fff;
+}
+
+/* 받침대 */
+.mic-icon::before {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 2px;
+  background: #fff;
+}
+
+/* 음소거 상태일 때 – 버튼 색 분홍 + 대각선 */
+.top-bar .mic-btn.muted {
+  background: #ff6fa8;
+}
+
+.top-bar .mic-btn.muted .mic-icon::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 22px;
+  height: 2px;
+  background: #fff;
+  transform: rotate(-45deg);
+}
+
+/* 🔴 나가기 버튼 빨간색 */
+.top-bar .leave-btn {
+  background: #e74c3c;
+}
+
+.top-bar .leave-btn:hover {
+  background: #c0392b;
+}
+
+/* 메인 2컬럼 레이아웃 */
+.main-layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* 왼쪽 영역 전체 (영상 스트립 + 보드) */
+.left-side {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 8px 8px 16px;
+  gap: 8px;
+}
+
+/* 상단 1:1 영상 스트립 */
+.video-strip {
+  display: flex;
+  gap: 8px;
+  height: 100px;
+}
+
+.video-panel {
+  flex: 1;
+  background: #dcdcdc;
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-panel video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-label {
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  font-size: 0.8rem;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* 보드 영역 전체 */
+.board-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: #fff8dc;
+}
+
+/* 보드 상단 설명/제목 */
+.board-header {
+  padding: 6px 10px;
+  border-bottom: 1px solid #e0d6a6;
+  font-size: 0.85rem;
+}
+
+/* 실제 그림/화면 공유 영역 */
+.board-body {
+  flex: 1;
+  padding: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 화면 공유 + 캔버스 오버레이 컨테이너 */
+.screen-share-container {
+  position: relative;
+  width: 848px;
+  height: 480px;
+  max-width: 100%;
+  background: #000;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* 공유 화면 비디오 */
+.screen-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* 보드 캔버스 (화면 위에 겹쳐 그림) */
+.screen-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 보드 필기 ON → 펜 커서 */
+.pen-cursor {
+  cursor: crosshair;
+}
+
+/* 지우개 ON → 지우개 커서 */
+.eraser-cursor {
+  cursor: cell;
+}
+
+/* 지우개 미리보기 박스 */
+.eraser-preview {
+  display: inline-block;
+  margin-left: 4px;
+  border: 2px solid #000;
+  background: transparent;
+}
+
+/* 보드 하단: 컨트롤 버튼들 */
+.board-controls {
+  padding: 6px 10px;
+  border-top: 1px solid #e0d6a6;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.board-controls button {
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  border: 1px solid #bbb;
+  background: #f0f0f0;
+  cursor: pointer;
+}
+
+.board-controls button.primary {
+  background: #4a7bd4;
+  color: #fff;
+  border-color: #4a7bd4;
+}
+
+.board-controls button.toggle-on {
+  background: #ffcc66;
+  border-color: #e0a944;
+}
+
+.board-controls button:hover {
+  background: #e5e5e5;
+}
+
+.board-controls input[type="color"] {
+  width: 32px;
+  height: 22px;
+  padding: 0;
+  border: none;
+}
+
+.board-controls input[type="range"] {
+  vertical-align: middle;
+}
+
+/* 오른쪽: 채팅 + 메모 */
+.right-side {
+  flex: 1.2;
+  padding: 8px 16px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+}
+
+/* 채팅 패널 */
+.chat-panel {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+}
+
+.chat-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+}
+
+/* 채팅 화면 영역 */
+.chat-window {
+  flex: 1;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 6px;
+  background: #ffffff;
+  overflow-y: auto;
+  font-size: 0.85rem;
+  margin-bottom: 0;   /* 입력창과 '바짝' 붙임 */
+}
+
+/* 입력창 + 버튼 묶음 */
+.chat-input-row {
+  display: flex;
+  flex-direction: row;   /* 🔥 버튼을 오른쪽에 배치 */
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* 채팅 입력창 */
+.chat-input {
+  flex: 1;
+  min-height: 120px;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 0.9rem;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+/* 글자색 버튼 상위 div 제거 후 정리 */
+.chat-color-row {
+  display: none;   /* 🔥 완전 제거 (UI에 보이지 않음) */
+}
+
+/* 오른쪽 버튼 묶음 */
+.chat-buttons {
+  display: flex;
+  flex-direction: column;
+  width: 60px;   /* 🔥 버튼 폭 축소 */
+  gap: 6px;
+}
+
+/* 글자색 버튼 (작게) */
+.chat-color-picker {
+  width: 100%;
+  height: 32px;    /* 🔥 높이 축소 */
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid #999;
+  cursor: pointer;
+}
+
+/* 전송 버튼 (작게) */
+.chat-send-btn {
+  width: 100%;
+  height: 32px;     /* 🔥 높이 축소 */
+  font-size: 0.8rem;
+  border-radius: 4px;
+  border: none;
+  background: #4a7bd4;
+  color: white;
+  cursor: pointer;
+}
+
+.chat-send-btn:hover {
+  background: #3862af;
+}
+
+
+/* 공유 메모 */
+.notes-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.notes-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+}
+
+.notes-panel textarea {
+  flex: 1;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  padding: 6px;
+  font-size: 0.85rem;
+  resize: vertical;
+  overflow: auto;
+}
