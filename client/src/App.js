@@ -19,16 +19,16 @@ function App() {
   );
   const [isJoined, setIsJoined] = useState(false);
 
-  // 🔊 내 마이크 on/off + 소켓ID
+  // 내 마이크 on/off + 소켓ID
   const [isMuted, setIsMuted] = useState(false);
   const isMutedRef = useRef(false); // 현재 음소거 상태
   const [mySocketId, setMySocketId] = useState(null);
 
-  // 🔈 전체 스피커 상태
+  // 전체 스피커 상태
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [speakerVolume, setSpeakerVolume] = useState(1); // 0~1
 
-  // 🎙 마이크 볼륨 & 레벨
+  // 마이크 볼륨 & 레벨
   const [micVolume, setMicVolume] = useState(1); // 0~2 정도
   const [micLevel, setMicLevel] = useState(0); // 0~1 (레벨바)
 
@@ -66,7 +66,7 @@ function App() {
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [chatColor, setChatColor] = useState("#000000");
-  const [chatFontSize, setChatFontSize] = useState(14); // ✅ 채팅 글자 크기(px)
+  const [chatFontSize, setChatFontSize] = useState(14); // 채팅 글자 크기(px)
 
   // 보드
   const canvasRef = useRef(null);
@@ -75,14 +75,14 @@ function App() {
   const [penWidth, setPenWidth] = useState(2);
   const [isBoardDrawMode, setIsBoardDrawMode] = useState(false);
   const [isEraserMode, setIsEraserMode] = useState(false);
-  const [isEraserDrag, setIsEraserDrag] = useState(false); // ✅ 추가
+  const [isEraserDrag, setIsEraserDrag] = useState(false); // 추가
   const [eraserSize, setEraserSize] = useState(16);
-  const dragPreviewImageRef = useRef(null); // ✅ 드래그 미리보기용
+  const dragPreviewImageRef = useRef(null); // 드래그 미리보기용
 
   // // 공유 메모 (리치 텍스트 HTML)
   const noteEditorRef = useRef(null);
 
-  // ✅ 메모 서식(B/I/U/S) 활성 상태
+  // 메모 서식(B/I/U/S) 활성 상태
   const [activeFormats, setActiveFormats] = useState({
     bold: false,
     italic: false,
@@ -90,7 +90,7 @@ function App() {
     strike: false,
   });
 
-  const [noteFontSize, setNoteFontSize] = useState("3"); // ✅ execCommand용 1~7
+  const [noteFontSize, setNoteFontSize] = useState("3"); // execCommand용 1~7
 
   // ─────────────────────────────────────
   // Socket.IO 연결 및 이벤트
@@ -104,7 +104,7 @@ function App() {
       setMySocketId(socket.id);
     });
 
-    // ✅ 서버에서 보내주는 방 참가자 전체 목록
+    // 서버에서 보내주는 방 참가자 전체 목록
     socket.on("room-users", async ({ users }) => {
       console.log("[client] room-users:", users);
       const myId = socket.id;
@@ -282,7 +282,7 @@ function App() {
       }
 
       console.log("로컬 스트림(마이크 게인 포함) 획득");
-      startVoiceDetection(); // 🔊 말하기 감지
+      startVoiceDetection(); // 말하기 감지
     } catch (err) {
       console.error("getUserMedia 실패:", err);
       alert("카메라/마이크 접근 실패");
@@ -380,7 +380,7 @@ function App() {
     await ensureLocalStream();
   };
 
-  // 🔊 마이크 음소거 토글 (게인 + 트랙 + 모든 PeerConnection 오디오 완전 차단)
+  // 마이크 음소거 토글 (게인 + 트랙 + 모든 PeerConnection 오디오 완전 차단)
   const toggleMute = () => {
     if (
       !micGainNodeRef.current &&
@@ -701,7 +701,7 @@ function App() {
     drawing.current = false;
   };
 
-  // ⬇⬇⬇ 여기부터 새로 추가 ⬇⬇⬇
+  // ======== 여기부터 새로 추가 ==========
   const drawStroke = (stroke) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -741,7 +741,7 @@ function App() {
     ctx.restore();
   };
 
-  // ⬆⬆⬆ 여기까지 새로 추가 ⬆⬆⬆
+  // ========= 여기까지 새로 추가 ==========
 
   const handleClearCanvas = () => {
     const canvas = canvasRef.current;
@@ -754,14 +754,14 @@ function App() {
   // 공유 메모
   // ─────────────────────────────────────
 
-  // ⭐ execCommand 이후에 현재 B/I/U/S 상태를 읽어서 state로 반영
+  // execCommand 이후에 현재 B/I/U/S 상태를 읽어서 state로 반영
   const refreshActiveFormats = () => {
     try {
       setActiveFormats({
         bold: document.queryCommandState("bold"),
         italic: document.queryCommandState("italic"),
         underline: document.queryCommandState("underline"),
-        strike: document.queryCommandState("strikeThrough"), // ✅ strike 키
+        strike: document.queryCommandState("strikeThrough"), // strike 키
       });
     } catch {
       // 에러가 나더라도 앱이 죽지 않도록 기본값
@@ -774,7 +774,7 @@ function App() {
     }
   };
 
-  // ⭐ 현재 텍스트 스타일(B/I/U/S)이 활성화되어 있는지 확인하는 함수
+  // 현재 텍스트 스타일(B/I/U/S)이 활성화되어 있는지 확인하는 함수
   // const isFormatActive = (command) => {
   //   try {
   //     return document.queryCommandState(command);
@@ -783,7 +783,7 @@ function App() {
   //   }
   // };
 
-  // ⭐ 현재 텍스트 스타일(B/I/U/S)이 활성화되어 있는지 확인 (state 사용)
+  // 현재 텍스트 스타일(B/I/U/S)이 활성화되어 있는지 확인 (state 사용)
   const isFormatActive = (key) => {
     return !!activeFormats[key];
   };
@@ -812,7 +812,7 @@ function App() {
     refreshActiveFormats();
   };
 
-  // ✅ 메모 글자 크기 변경 (선택 영역에 적용)
+  // 메모 글자 크기 변경 (선택 영역에 적용)
   const handleNoteFontSizeChange = (e) => {
     const size = e.target.value; // "1"~"7"
     setNoteFontSize(size);
@@ -844,7 +844,7 @@ function App() {
     });
   };
 
-  // 🔹 여기부터 새 코드
+  // 여기부터 새 코드
   const toggleEraserMode = () =>
     setIsEraserMode((prev) => {
       const next = !prev;
@@ -856,7 +856,7 @@ function App() {
     });
 
   const toggleEraserDragMode = () => setIsEraserDrag((prev) => !prev);
-  // 🔹 여기까지 새 코드
+  // 여기까지 새 코드
 
   const canvasClassName = [
     "screen-canvas",
@@ -873,7 +873,7 @@ function App() {
     const baseStream = localStreamRef.current || rawLocalStreamRef.current;
     if (!baseStream || !socketRef.current || !roomId) return;
 
-    const selfId = socketRef.current.id; // ✅ 항상 최신 소켓 ID 사용
+    const selfId = socketRef.current.id; // 항상 최신 소켓 ID 사용
 
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const audioCtx = new AudioContext();
@@ -886,7 +886,7 @@ function App() {
     let lastSpeaking = false;
 
     const check = () => {
-      // 🔸 마이크가 꺼져 있으면 항상 무음 처리
+      // 마이크가 꺼져 있으면 항상 무음 처리
       const audioTracks = localStreamRef.current
         ? localStreamRef.current.getAudioTracks()
         : [];
@@ -926,7 +926,7 @@ function App() {
           roomId,
           isSpeaking,
         });
-        // ✅ 본인 브라우저에서도 내 타일에 speaking 하이라이트 적용
+        // 본인 브라우저에서도 내 타일에 speaking 하이라이트 적용
         setSpeakerId(isSpeaking ? selfId : null);
       }
       requestAnimationFrame(check);
@@ -956,7 +956,7 @@ function App() {
     const v = Number(e.target.value);
     setMicVolume(v);
 
-    // 🔸 음소거 상태가 아닐 때만 게인 반영
+    // 음소거 상태가 아닐 때만 게인 반영
     if (!isMutedRef.current && micGainNodeRef.current) {
       micGainNodeRef.current.gain.value = v;
     }
@@ -992,7 +992,7 @@ function App() {
     <div className="app-root">
       {/* 상단 바 */}
       <div className="top-bar">
-        <span className="top-bar-title">WebRTC 1:N 화상 + 화면 공유</span>
+        <span className="top-bar-title">WebRTC 1:N (ver2.1) </span>
 
         <label>
           방 ID:
@@ -1013,7 +1013,7 @@ function App() {
 
         <button onClick={handleCallStart}>화상 시작</button>
 
-        {/* 🔈 스피커 버튼 + 볼륨 */}
+        {/* 스피커 버튼 + 볼륨 */}
         <div className="audio-control-group">
           <button
             className={`speaker-btn ${isSpeakerMuted ? "muted" : ""}`}
@@ -1042,7 +1042,7 @@ function App() {
           </div>
         </div>
 
-        {/* 🎙 마이크 버튼 + 볼륨 + 레벨 */}
+        {/* 마이크 버튼 + 볼륨 + 레벨 */}
         <div className="audio-control-group">
           <button
             className={`mic-btn ${isMuted ? "muted" : ""}`}
@@ -1184,7 +1184,7 @@ function App() {
               <button
                 className={isEraserDrag ? "toggle-on" : ""}
                 onClick={toggleEraserDragMode}
-                disabled={!isEraserMode} // ✅ 지우개 ON일 때만 활성화
+                disabled={!isEraserMode} // 지우개 ON일 때만 활성화
                 style={{ marginLeft: "12px" }}
               >
                 지우개 드래그 {isEraserDrag ? "ON" : "OFF"}
@@ -1268,7 +1268,7 @@ function App() {
                   className="chat-color-picker"
                 />
 
-                {/* ✅ 글자크기 선택 (전송 버튼 위) */}
+                {/* 글자크기 선택 (전송 버튼 위) */}
                 <select
                   className="chat-font-size"
                   value={chatFontSize}
@@ -1338,7 +1338,7 @@ function App() {
                 />
               </label>
 
-              {/* ✅ 글자 크기: 색상 우측 */}
+              {/* 글자 크기: 색상 우측 */}
               <label className="notes-color-label">
                 크기
                 </label>
