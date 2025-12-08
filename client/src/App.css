@@ -554,12 +554,40 @@
   overflow-x: hidden;
 }
 
-/* 포맷 툴바 */
+/* 공유 메모 툴바 전체를 가로 배치 */
 .notes-toolbar {
-  margin-top: 4px;
   display: flex;
+  align-items: center;
   gap: 4px;
-  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+/* 왼쪽 그룹: B/I/U/S + 색상 */
+.notes-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 오른쪽 그룹: size 를 맨 오른쪽으로 밀기 */
+.notes-toolbar-right {
+  margin-left: auto; /* 오른쪽 끝으로 밀기 */
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 기존 색상 라벨이 있다면 그대로 사용해도 됨 */
+.notes-color-label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* size 라벨도 살짝 정렬 */
+.notes-size-label {
+  display: inline-block;
 }
 
 .notes-toolbar button {

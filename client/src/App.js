@@ -3,8 +3,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import "./App.css";
 
-const SOCKET_URL = "http://localhost:5000";
-// const SOCKET_URL = "http://192.168.162.56:5000";
+// const SOCKET_URL = "http://localhost:5000";
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL;
 
 const pcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -91,7 +91,7 @@ function App() {
     strike: false,
   });
 
-  const [noteFontSize, setNoteFontSize] = useState("3"); // execCommand용 1~7
+  const [noteFontSize, setNoteFontSize] = useState(14); // 기본 14px
 
   // ─────────────────────────────────────
   // Socket.IO 연결 및 이벤트
@@ -120,10 +120,10 @@ function App() {
           const info = peersRef.current[peerId];
 
           if (info?.pc) {
-            // ❌ 기존: 내 로컬 카메라/마이크 트랙까지 stop 해서 모두 까매짐
+            // 기존: 내 로컬 카메라/마이크 트랙까지 stop 해서 모두 까매짐
             // info.pc.getSenders().forEach((s) => s.track && s.track.stop());
 
-            // ✅ 수정: 연결만 닫고, 트랙은 그대로 유지
+            // 수정: 연결만 닫고, 트랙은 그대로 유지
             info.pc.close();
           }
 
@@ -878,11 +878,82 @@ function App() {
     refreshActiveFormats();
   };
 
-  // 메모 글자 크기 변경 (선택 영역에 적용)
+  // 메모 글자 크기 변경 (선택/커서 위치에 px 적용)
   const handleNoteFontSizeChange = (e) => {
-    const size = e.target.value; // "1"~"7"
-    setNoteFontSize(size);
-    applyNoteFormat("fontSize", size);
+    const px = Number(e.target.value); // 12, 14, 18, 22
+    setNoteFontSize(px);
+
+    if (!noteEditorRef.current) return;
+    const editor = noteEditorRef.current;
+
+    // 1) 먼저 에디터 포커스 복원 → selection 되살리기
+    editor.focus();
+
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    const range = sel.getRangeAt(0);
+
+    // 선택 영역이 에디터 안에 있을 때만
+    if (!editor.contains(range.commonAncestorContainer)) return;
+
+    // ─────────────────────────────
+    // A. 드래그로 선택된 텍스트가 있는 경우
+    //    → 모든 자손의 font-size 를 강제로 px 로 통일
+    // ─────────────────────────────
+    if (!sel.isCollapsed) {
+      const fragment = range.extractContents();
+
+      // 선택된 내용을 감쌀 wrapper
+      const wrapper = document.createElement("span");
+      wrapper.appendChild(fragment);
+
+      // wrapper 및 모든 자손 element 의 font-size 를 통일
+      wrapper.style.fontSize = `${px}px`;
+      wrapper.querySelectorAll("*").forEach((el) => {
+        // 기존 font-size 제거 후 새 크기로 설정
+        el.style.fontSize = `${px}px`;
+        if (el.tagName === "FONT") {
+          el.removeAttribute("size");
+        }
+      });
+
+      range.insertNode(wrapper);
+
+      // 커서를 wrapper 뒤로 이동 (편의)
+      sel.removeAllRanges();
+      const newRange = document.createRange();
+      newRange.setStartAfter(wrapper);
+      newRange.collapse(true);
+      sel.addRange(newRange);
+    } else {
+      // ─────────────────────────────
+      // B. 커서만 있는 경우
+      //    → 이후 입력될 글자의 기본 크기를 지정
+      // ─────────────────────────────
+      const span = document.createElement("span");
+      span.style.fontSize = `${px}px`;
+
+      const placeholder = document.createTextNode("\u200B");
+      span.appendChild(placeholder);
+
+      range.insertNode(span);
+
+      const newRange = document.createRange();
+      newRange.setStart(placeholder, 0);
+      newRange.setEnd(placeholder, 0);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+
+    // 변경된 HTML을 서버에 공유
+    const html = editor.innerHTML;
+    if (socketRef.current) {
+      socketRef.current.emit("note-update", { roomId, text: html });
+    }
+
+    // B/I/U/S 상태 갱신
+    refreshActiveFormats();
   };
 
   // ─────────────────────────────────────
@@ -1384,7 +1455,7 @@ function App() {
               contentEditable
               suppressContentEditableWarning={true}
               onInput={handleNoteInput}
-              style={{ fontSize: "14px" }} // 선택 서식은 execCommand로, 기본값만 지정
+              style={{ fontSize: "14px" }} // 에디터 기본값
             />
 
             {/* 포맷 툴바 */}
@@ -1425,14 +1496,19 @@ function App() {
                 />
               </label>
 
-              {/* 글자 크기: 색상 우측 */}
-              <label className="notes-color-label">크기</label>
-              <select value={noteFontSize} onChange={handleNoteFontSizeChange}>
-                <option value="12">작게</option>
-                <option value="14">보통</option>
-                <option value="18">크게</option>
-                <option value="22">최대</option>
-              </select>
+              {/* 오른쪽: size + select (하단 우측) */}
+              <div className="notes-toolbar-right">
+                <label className="notes-size-label">size</label>
+                <select
+                  value={noteFontSize}
+                  onChange={handleNoteFontSizeChange}
+                >
+                  <option value="12">작게</option>
+                  <option value="14">보통</option>
+                  <option value="18">크게</option>
+                  <option value="22">최대</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>

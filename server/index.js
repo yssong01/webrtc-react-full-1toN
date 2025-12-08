@@ -9,9 +9,10 @@ const cors = require("cors");
 const app = express();
 
 const PORT = process.env.PORT || 5000;
+
 // 리액트 개발 서버는 3000이지만, 아래에서 origin:"*" 로 풀어서 상관 없음
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:3000";
-//const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://192.168.162.56:3000";
+// const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:3000";
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "*";
 
 // HTTP CORS (REST 요청용)
 app.use(
