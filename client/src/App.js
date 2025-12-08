@@ -4,7 +4,7 @@ import { io } from "socket.io-client";
 import "./App.css";
 
 const SOCKET_URL = "http://localhost:5000";
-//const SOCKET_URL = "http://192.168.162.56:5000";
+// const SOCKET_URL = "http://192.168.162.56:5000";
 
 const pcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -111,19 +111,41 @@ function App() {
       const myId = socket.id;
       setMySocketId(myId);
 
+      const currentIds = users.map((u) => u.socketId);
       const others = users.filter((u) => u.socketId !== myId);
 
-      if (others.length > 0) {
-        await ensureLocalStream();
-      }
+      // 1) 방에서 사라진 유저 정리 (PC close + remoteStreams 제거)
+      Object.keys(peersRef.current).forEach((peerId) => {
+        if (!currentIds.includes(peerId)) {
+          const info = peersRef.current[peerId];
 
+          if (info?.pc) {
+            // ❌ 기존: 내 로컬 카메라/마이크 트랙까지 stop 해서 모두 까매짐
+            // info.pc.getSenders().forEach((s) => s.track && s.track.stop());
+
+            // ✅ 수정: 연결만 닫고, 트랙은 그대로 유지
+            info.pc.close();
+          }
+
+          delete peersRef.current[peerId];
+          delete remoteVideoRefs.current[peerId];
+
+          // 말하던 사람/보드 필기자라면 상태도 초기화
+          setSpeakerId((prev) => (prev === peerId ? null : prev));
+          setBoardUserId((prev) => (prev === peerId ? null : prev));
+        }
+      });
+
+      // 2) remoteStreams 목록에서도 나간 유저 제거
+      setRemoteStreams((prev) => prev.filter((p) => currentIds.includes(p.id)));
+
+      // 3) 새로 들어온 유저에 대해서만 PeerConnection 생성
       others.forEach((u) => {
         const peerId = u.socketId;
         const peerName = u.username;
 
         if (peersRef.current[peerId]?.pc) return;
 
-        // socketId 문자열 비교로 한쪽만 Offer
         const isCaller = myId < peerId;
         createPeerConnection(peerId, peerName, isCaller);
       });
@@ -132,7 +154,8 @@ function App() {
     // ── WebRTC 시그널링 ──
     socket.on("webrtc-offer", async ({ from, sdp }) => {
       console.log("[client] webrtc-offer from", from);
-      await ensureLocalStream();
+
+      // await ensureLocalStream();
       const pc = createPeerConnection(
         from,
         peersRef.current[from]?.username,
@@ -379,6 +402,38 @@ function App() {
       return;
     }
     await ensureLocalStream();
+
+    // 이미 존재하는 모든 PeerConnection에 내 트랙을 붙이고, 재협상(Offer) 보내기
+    if (localStreamRef.current && socketRef.current) {
+      const entries = Object.entries(peersRef.current);
+      for (const [peerId, info] of entries) {
+        const pc = info.pc;
+        if (!pc) continue;
+
+        // 같은 kind 트랙을 중복으로 addTrack 하지 않도록 방어
+        const existingKinds = pc
+          .getSenders()
+          .map((s) => (s.track ? s.track.kind : null));
+
+        localStreamRef.current.getTracks().forEach((track) => {
+          if (!existingKinds.includes(track.kind)) {
+            pc.addTrack(track, localStreamRef.current);
+          }
+        });
+
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socketRef.current.emit("webrtc-offer", {
+            roomId,
+            sdp: offer,
+            to: peerId,
+          });
+        } catch (err) {
+          console.error("재협상 offer 실패:", err);
+        }
+      }
+    }
   };
 
   // 마이크 음소거 토글 (게인 + 트랙 + 모든 PeerConnection 오디오 완전 차단)
@@ -524,16 +579,24 @@ function App() {
   };
 
   // ─────────────────────────────────────
-  // 통화 종료
+  // 통화 종료 + 방 나가기
   // ─────────────────────────────────────
   const handleHangup = () => {
+    // 0) 방에 참가 중이면 먼저 서버에 알림
+    if (socketRef.current && isJoined) {
+      socketRef.current.emit("leave-room", { roomId });
+    }
+
+    // 1) 화면 공유 정리
     handleStopShare();
 
+    // 2) 로컬 스트림 정리
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
 
+    // 3) 모든 PeerConnection 정리
     Object.values(peersRef.current).forEach(({ pc }) => {
       if (!pc) return;
       pc.getSenders().forEach((s) => {
@@ -544,9 +607,11 @@ function App() {
     peersRef.current = {};
     setRemoteStreams([]);
 
+    // 4) 비디오 요소 정리
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (screenVideoRef.current) screenVideoRef.current.srcObject = null;
 
+    // 5) 상태 리셋
     setIsJoined(false);
     setIsMuted(false);
     isMutedRef.current = false;
@@ -845,8 +910,10 @@ function App() {
     });
   };
 
-  // 여기부터 새 코드
-  const toggleEraserMode = () =>
+  // 보드 필기 OFF면 아예 동작하지 않도록 가드 추가
+  const toggleEraserMode = () => {
+    if (!isBoardDrawMode) return; // 보드 OFF일 때는 무시
+
     setIsEraserMode((prev) => {
       const next = !prev;
       if (!next) {
@@ -855,8 +922,14 @@ function App() {
       }
       return next;
     });
+  };
 
-  const toggleEraserDragMode = () => setIsEraserDrag((prev) => !prev);
+  // 보드 OFF 이거나 지우개 OFF면 드래그 버튼도 동작 안 함
+  const toggleEraserDragMode = () => {
+    if (!isBoardDrawMode || !isEraserMode) return;
+    setIsEraserDrag((prev) => !prev);
+  };
+
   // 여기까지 새 코드
 
   const canvasClassName = [
@@ -1105,23 +1178,33 @@ function App() {
                 className={
                   "video-panel" +
                   (speakerId === p.id ? " speaking" : "") +
-                  (boardUserId === p.id ? " boarding" : "")
+                  (boardUserId === p.id ? " boarding" : "") +
+                  (p.offline ? " offline" : "")
                 }
                 style={{ order: orderMap[p.id] ?? 0 }}
               >
-                <video
-                  autoPlay
-                  playsInline
-                  ref={(el) => {
-                    if (el) {
-                      remoteVideoRefs.current[p.id] = el;
-                      if (p.stream && el.srcObject !== p.stream) {
-                        el.srcObject = p.stream;
+                {p.stream ? (
+                  <video
+                    autoPlay
+                    playsInline
+                    ref={(el) => {
+                      if (el) {
+                        remoteVideoRefs.current[p.id] = el;
+                        if (p.stream && el.srcObject !== p.stream) {
+                          el.srcObject = p.stream;
+                        }
                       }
-                    }
-                  }}
-                />
-                <span className="video-label">{p.username}</span>
+                    }}
+                  />
+                ) : (
+                  // 🔹 영상이 없으면 회색 배경 + 안내 텍스트
+                  <div className="video-offline-text">연결 종료</div>
+                )}
+
+                <span className="video-label">
+                  {p.username}
+                  {p.offline ? " (퇴장)" : ""}
+                </span>
               </div>
             ))}
           </div>
@@ -1162,9 +1245,11 @@ function App() {
                 보드 필기 {isBoardDrawMode ? "ON" : "OFF"}
               </button>
 
+              {/* 보드 OFF일 때는 지우개 버튼 비활성화 */}
               <button
                 className={isEraserMode ? "toggle-on" : ""}
                 onClick={toggleEraserMode}
+                disabled={!isBoardDrawMode}
               >
                 지우개 {isEraserMode ? "ON" : "OFF"}
               </button>
@@ -1176,6 +1261,7 @@ function App() {
                 max="40"
                 value={eraserSize}
                 onChange={(e) => setEraserSize(Number(e.target.value))}
+                disabled={!isBoardDrawMode}
               />
               <div
                 className="eraser-preview"
@@ -1185,7 +1271,7 @@ function App() {
               <button
                 className={isEraserDrag ? "toggle-on" : ""}
                 onClick={toggleEraserDragMode}
-                disabled={!isEraserMode} // 지우개 ON일 때만 활성화
+                disabled={!isBoardDrawMode || !isEraserMode}
                 style={{ marginLeft: "12px" }}
               >
                 지우개 드래그 {isEraserDrag ? "ON" : "OFF"}

@@ -134,25 +134,28 @@ io.on("connection", (socket) => {
     });
   });
 
-  // 끊기 직전에 퇴장 시스템 메시지
   // 끊기 직전에 퇴장 시스템 메시지 + room-users 갱신
   socket.on("disconnecting", () => {
     const username = socket.data.username || "알 수 없음";
+
+    // socket.rooms 에는 소켓ID + 가입된 roomID 가 들어 있음
     const rooms = [...socket.rooms].filter((r) => r !== socket.id);
 
     rooms.forEach((roomId) => {
       // 1) 퇴장 시스템 메시지
       io.to(roomId).emit("chat-message", {
         user: username,
-        message: `${username} 퇴장했습니다.`,
+        message: `${username} 나갔습니다.`,
         color: "#666666",
         time: new Date().toISOString(),
         isSystem: true,
       });
 
-      // 2) 최신 사용자 목록 다시 계산해서 room-users 브로드캐스트
+      // 2) 현재 room 에 있는 소켓 목록에서 "지금 끊기는 소켓"은 제외
       const room = io.sockets.adapter.rooms.get(roomId) || new Set();
-      const users = [...room].map((id) => {
+      const remainingIds = [...room].filter((id) => id !== socket.id);
+
+      const users = remainingIds.map((id) => {
         const s = io.sockets.sockets.get(id);
         return {
           socketId: id,
@@ -160,8 +163,40 @@ io.on("connection", (socket) => {
         };
       });
 
+      // 3) 남아있는 사람들만 포함된 room-users 브로드캐스트
       io.to(roomId).emit("room-users", { users });
     });
+  });
+
+  // ============= 방 나가기(사용자가 "나가기" 버튼 클릭) =============
+  socket.on("leave-room", ({ roomId }) => {
+    const username = socket.data.username || "알 수 없음";
+
+    console.log(`socket ${socket.id} leave room ${roomId} (${username})`);
+
+    // 먼저 방에서 제거
+    socket.leave(roomId);
+
+    // 1) 퇴장 시스템 메시지 (회색/이탤릭)
+    io.to(roomId).emit("chat-message", {
+      user: username,
+      message: `${username} 나갔습니다.`,
+      color: "#666666",
+      time: new Date().toISOString(),
+      isSystem: true,
+    });
+
+    // 2) 최신 사용자 목록(본인 제외) 다시 계산해서 room-users 브로드캐스트
+    const room = io.sockets.adapter.rooms.get(roomId) || new Set();
+    const users = [...room].map((id) => {
+      const s = io.sockets.sockets.get(id);
+      return {
+        socketId: id,
+        username: s && s.data.username ? s.data.username : "unknown",
+      };
+    });
+
+    io.to(roomId).emit("room-users", { users });
   });
 });
 
