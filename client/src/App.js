@@ -4,6 +4,7 @@ import { io } from "socket.io-client";
 import "./App.css";
 
 const SOCKET_URL = "http://localhost:5000";
+//const SOCKET_URL = "http://192.168.162.56:5000";
 
 const pcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -1339,19 +1340,13 @@ function App() {
               </label>
 
               {/* 글자 크기: 색상 우측 */}
-              <label className="notes-color-label">
-                크기
-                </label>
-                <select
-                  value={noteFontSize}
-                  onChange={handleNoteFontSizeChange}
-                >
-                  <option value="12">작게</option>
-                  <option value="14">보통</option>
-                  <option value="18">크게</option>
-                  <option value="22">최대</option>
-                </select>
-              
+              <label className="notes-color-label">크기</label>
+              <select value={noteFontSize} onChange={handleNoteFontSizeChange}>
+                <option value="12">작게</option>
+                <option value="14">보통</option>
+                <option value="18">크게</option>
+                <option value="22">최대</option>
+              </select>
             </div>
           </div>
         </div>

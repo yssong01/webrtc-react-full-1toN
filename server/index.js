@@ -11,6 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 // 리액트 개발 서버는 3000이지만, 아래에서 origin:"*" 로 풀어서 상관 없음
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:3000";
+//const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://192.168.162.56:3000";
 
 // HTTP CORS (REST 요청용)
 app.use(
@@ -25,7 +26,7 @@ const server = http.createServer(app);
 // WebSocket CORS (Socket.IO용)
 const io = new Server(server, {
   cors: {
-    origin: CLIENT_ORIGIN,      // "*” 대신
+    origin: CLIENT_ORIGIN, // "*” 대신
     methods: ["GET", "POST"],
   },
 });
@@ -162,7 +163,6 @@ io.on("connection", (socket) => {
       io.to(roomId).emit("room-users", { users });
     });
   });
-
 });
 
 server.listen(PORT, () => {
