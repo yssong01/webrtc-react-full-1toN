@@ -1,12 +1,10 @@
-
 # 📡 WebRTC 1:N 실시간 공유 시스템 ver1.1
 
-## 🎞️ 시연 영상
+## 🎞️ 시연 영상 (🌏팀 : KDT 경수오빠못해조)
+
 <img src="./WebRTC_1toN.gif">
 
 **[팀 프로젝트 과제]** 
-
-✔️ 팀 : KDT 경수오빠못해조
 
 ✍️ React와 Node.js를 결합한 실시간 웹 서비스 WebRTC 구현하기
 
