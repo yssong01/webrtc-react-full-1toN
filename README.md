@@ -355,7 +355,7 @@ WEBRTC_REACT_FULL_1TON/
 │   └── package.json
 │
 ├── .gitignore
-├── 1toN.avi                  # 시연 영상
+├── WebRTC_1toN.gif           # 시연 영상
 ├── memo.txt
 └── README.md                 # 본 문서
 ```
