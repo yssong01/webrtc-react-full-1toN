@@ -210,7 +210,7 @@ WebRTC(Web Real-Time Communication) 기술을 활용하여 브라우저만으로
 ### 공통점
 
 - 모두 **WebRTC 기본 구성**은 동일
-  - MediaStream + RTCPeerConnection + ICE + Signaling
+- MediaStream + RTCPeerConnection + ICE + Signaling
 - **Offer → Answer → ICE** 순서로 P2P 연결 수립
 - 브라우저는 "몇 명과 통신하는지"를 신경 쓰지 않음
 - 단지 **PeerConnection 인스턴스 수**와 **스트림 관리 방식**만 다름
