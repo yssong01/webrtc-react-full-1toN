@@ -3,87 +3,99 @@ import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import "./App.css";
 
-// const SOCKET_URL = "http://localhost:5000";
+// WebSocket 서버 주소는 .env 에서 주입
+// 예: REACT_APP_SOCKET_URL=http://localhost:5000
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL;
 
+// WebRTC 연결 시 사용할 ICE 서버 설정
+// - 여기선 Google STUN 서버만 사용 (TURN 미구현)
 const pcConfig = {
   iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
 
 function App() {
   // ─────────────────────────────────────
-  // 공통 상태
+  // 1. 공통 상태 (방 정보 / 사용자 정보 / 음성 관련)
   // ─────────────────────────────────────
-  const [roomId, setRoomId] = useState("room-1");
+  const [roomId, setRoomId] = useState("room-1"); // 기본 방 ID
   const [username, setUsername] = useState(
-    "user-" + Math.floor(Math.random() * 1000)
+    "user-" + Math.floor(Math.random() * 1000) // 랜덤 닉네임
   );
-  const [isJoined, setIsJoined] = useState(false);
+  const [isJoined, setIsJoined] = useState(false); // 방 입장 여부
 
-  // 내 마이크 on/off + 소켓ID
+  // 내 마이크 ON/OFF 상태
   const [isMuted, setIsMuted] = useState(false);
-  const isMutedRef = useRef(false); // 현재 음소거 상태
-  const [mySocketId, setMySocketId] = useState(null);
+  const isMutedRef = useRef(false); // 오디오 분석 함수에서 사용할 현재 음소거 상태
+  const [mySocketId, setMySocketId] = useState(null); // 내 소켓 ID
 
-  // 전체 스피커 상태
+  // 전체 스피커 상태 (모든 remote 비디오에 공통 적용)
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [speakerVolume, setSpeakerVolume] = useState(1); // 0~1
 
-  // 마이크 볼륨 & 레벨
-  const [micVolume, setMicVolume] = useState(1); // 0~2 정도
-  const [micLevel, setMicLevel] = useState(0); // 0~1 (레벨바)
+  // 마이크 볼륨(게인) & 말하기 레벨바(0~1)
+  const [micVolume, setMicVolume] = useState(1); // 0~2 정도, 게인값
+  const [micLevel, setMicLevel] = useState(0);   // 시각화용 레벨바 값
 
-  // Socket, PeerConnection, 스트림 관리
-  const socketRef = useRef(null);
+  // ─────────────────────────────────────
+  // 2. 소켓 / WebRTC / 스트림 관련 ref
+  // ─────────────────────────────────────
+  const socketRef = useRef(null);             // Socket.IO 인스턴스
+  const rawLocalStreamRef = useRef(null);     // getUserMedia로 얻은 원본 스트림
+  const localStreamRef = useRef(null);        // 마이크 게인 처리 등 후 최종 송출 스트림
+  const screenStreamRef = useRef(null);       // 화면 공유용 스트림
+  const screenSenderRef = useRef({});         // { peerId: RTCRtpSender } (화면 트랙 관리)
 
-  // 원본 로컬 스트림 (가공 전)
-  const rawLocalStreamRef = useRef(null);
-
-  // 마이크 게인 처리 후 로컬 스트림
-  const localStreamRef = useRef(null);
-  const screenStreamRef = useRef(null);
-  const screenSenderRef = useRef({}); // { peerId: RTCRtpSender }
-
-  // 마이크 볼륨 조절용 Web Audio
+  // Web Audio용: 마이크 볼륨 조절을 위한 오디오 그래프
   const audioCtxRef = useRef(null);
   const micGainNodeRef = useRef(null);
 
-  // 1:N 피어 관리용  { [socketId]: { pc, username, hasCam } }
+  // 1:N 피어 연결 상태 관리용: { [socketId]: { pc, username, hasCam } }
   const peersRef = useRef({});
 
-  // 원격 비디오 DOM (전역 스피커 볼륨 적용용)
+  // 원격 비디오 DOM 참조 (스피커 볼륨/뮤트 한 번에 적용하기 위함)
   const remoteVideoRefs = useRef({}); // { socketId: HTMLVideoElement }
 
-  // 원격 화면 상태
-  const [remoteStreams, setRemoteStreams] = useState([]); // [{id, username, stream}]
+  // remoteStreams: 현재 참가자의 화면 목록 (UI 렌더링용)
+  // - id: 각 피어의 소켓ID
+  // - username: 표시용 이름
+  // - stream: 실제 MediaStream (비디오 + 오디오)
+  const [remoteStreams, setRemoteStreams] = useState([]);
+
+  // "말하는 사람" / "보드 필기 중인 사람" 하이라이트용
   const [speakerId, setSpeakerId] = useState(null);
   const [boardUserId, setBoardUserId] = useState(null);
 
   // DOM refs
-  const localVideoRef = useRef(null);
-  const screenVideoRef = useRef(null);
+  const localVideoRef = useRef(null);   // 내 카메라 영상
+  const screenVideoRef = useRef(null);  // 화면 공유 영상
 
-  // 채팅
+  // ─────────────────────────────────────
+  // 3. 채팅 상태
+  // ─────────────────────────────────────
   const [chatInput, setChatInput] = useState("");
   const [messages, setMessages] = useState([]);
   const [chatColor, setChatColor] = useState("#000000");
   const [chatFontSize, setChatFontSize] = useState(14); // 채팅 글자 크기(px)
 
-  // 보드
+  // ─────────────────────────────────────
+  // 4. 화이트보드(캔버스) 상태
+  // ─────────────────────────────────────
   const canvasRef = useRef(null);
-  const drawing = useRef(false);
+  const drawing = useRef(false);           // 현재 그리고 있는 중인지 여부
   const [penColor, setPenColor] = useState("#ff0000");
   const [penWidth, setPenWidth] = useState(2);
-  const [isBoardDrawMode, setIsBoardDrawMode] = useState(false);
-  const [isEraserMode, setIsEraserMode] = useState(false);
-  const [isEraserDrag, setIsEraserDrag] = useState(false); // 추가
+  const [isBoardDrawMode, setIsBoardDrawMode] = useState(false); // 보드 필기 ON/OFF
+  const [isEraserMode, setIsEraserMode] = useState(false);       // 지우개 ON/OFF
+  const [isEraserDrag, setIsEraserDrag] = useState(false);       // 드래그 영역 지우기
   const [eraserSize, setEraserSize] = useState(16);
-  const dragPreviewImageRef = useRef(null); // 드래그 미리보기용
+  const dragPreviewImageRef = useRef(null); // 드래그 지우기 미리보기용 이미지 저장
 
-  // // 공유 메모 (리치 텍스트 HTML)
+  // ─────────────────────────────────────
+  // 5. 공유 메모 (리치 텍스트)의 DOM & 상태
+  // ─────────────────────────────────────
   const noteEditorRef = useRef(null);
 
-  // 메모 서식(B/I/U/S) 활성 상태
+  // B/I/U/S 버튼 활성 상태 (현재 선택 영역 기준)
   const [activeFormats, setActiveFormats] = useState({
     bold: false,
     italic: false,
@@ -91,21 +103,26 @@ function App() {
     strike: false,
   });
 
-  const [noteFontSize, setNoteFontSize] = useState(14); // 기본 14px
+  const [noteFontSize, setNoteFontSize] = useState(14); // 메모 기본 글자 크기(px)
 
   // ─────────────────────────────────────
-  // Socket.IO 연결 및 이벤트
+  // 6. Socket.IO 연결 및 각종 이벤트 등록
   // ─────────────────────────────────────
   useEffect(() => {
+    // 서버와 웹소켓 연결 생성
     const socket = io(SOCKET_URL, { transports: ["websocket"] });
     socketRef.current = socket;
 
+    // 연결 성공 시 내 socket.id 확보
     socket.on("connect", () => {
       console.log("[client] socket connected:", socket.id);
       setMySocketId(socket.id);
     });
 
-    // 서버에서 보내주는 방 참가자 전체 목록
+    // -------------------------------
+    // 서버에서 보내주는 "현재 방의 참가자 목록"
+    //   → 여기서 1:N WebRTC 피어 연결을 관리
+    // -------------------------------
     socket.on("room-users", async ({ users }) => {
       console.log("[client] room-users:", users);
       const myId = socket.id;
@@ -114,29 +131,29 @@ function App() {
       const currentIds = users.map((u) => u.socketId);
       const others = users.filter((u) => u.socketId !== myId);
 
-      // 1) 방에서 사라진 유저 정리 (PC close + remoteStreams 제거)
+      // 1) 방에서 나간 유저 정리: PeerConnection 닫기 + remoteStreams 제거
       Object.keys(peersRef.current).forEach((peerId) => {
         if (!currentIds.includes(peerId)) {
           const info = peersRef.current[peerId];
 
           if (info?.pc) {
-            // 기존: 내 로컬 카메라/마이크 트랙까지 stop 해서 모두 까매짐
+            // 이전 버전: 여기서 track.stop()까지 해서 내 카메라까지 꺼지는 문제가 있었음
             // info.pc.getSenders().forEach((s) => s.track && s.track.stop());
 
-            // 수정: 연결만 닫고, 트랙은 그대로 유지
+            // 수정 버전: 연결만 닫고, 내 로컬 트랙은 그대로 유지
             info.pc.close();
           }
 
           delete peersRef.current[peerId];
           delete remoteVideoRefs.current[peerId];
 
-          // 말하던 사람/보드 필기자라면 상태도 초기화
+          // 스피킹/보드 하이라이트에서 제거
           setSpeakerId((prev) => (prev === peerId ? null : prev));
           setBoardUserId((prev) => (prev === peerId ? null : prev));
         }
       });
 
-      // 2) remoteStreams 목록에서도 나간 유저 제거
+      // 2) remoteStreams 상태에서도 나간 유저 제거
       setRemoteStreams((prev) => prev.filter((p) => currentIds.includes(p.id)));
 
       // 3) 새로 들어온 유저에 대해서만 PeerConnection 생성
@@ -144,22 +161,26 @@ function App() {
         const peerId = u.socketId;
         const peerName = u.username;
 
+        // 이미 PC가 있다면 스킵
         if (peersRef.current[peerId]?.pc) return;
 
+        // 소켓ID 문자열 기준으로 "누가 먼저 Offer를 보낼지" 결정
         const isCaller = myId < peerId;
         createPeerConnection(peerId, peerName, isCaller);
       });
     });
 
-    // ── WebRTC 시그널링 ──
+    // -------------------------------
+    // WebRTC 시그널링 핸들링: Offer/Answer/ICE
+    // -------------------------------
     socket.on("webrtc-offer", async ({ from, sdp }) => {
       console.log("[client] webrtc-offer from", from);
 
-      // await ensureLocalStream();
+      // offer 를 받으면 피어 연결을 만들고, remote SDP를 적용 후 answer 생성
       const pc = createPeerConnection(
         from,
         peersRef.current[from]?.username,
-        false
+        false // 받은 쪽은 Caller가 아님
       );
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
       const answer = await pc.createAnswer();
@@ -184,19 +205,24 @@ function App() {
       }
     });
 
-    // ── 채팅 (일반 + 시스템) ──
+    // -------------------------------
+    // 채팅 메시지 수신 (일반 + 시스템 메시지)
+    // -------------------------------
     socket.on("chat-message", (payload) => {
       console.log("[client] chat-message:", payload);
       setMessages((prev) => [...prev, payload]);
     });
 
-    // 화이트보드 / 메모 / 화면공유
+    // -------------------------------
+    // 화이트보드 / 메모 / 화면공유 시그널링 수신
+    // -------------------------------
     socket.on("draw", ({ stroke }) => {
       drawStroke(stroke);
     });
 
     socket.on("note-update", ({ text }) => {
       const html = text || "";
+      // 내가 가진 메모 내용과 다를 때만 업데이트
       if (noteEditorRef.current && noteEditorRef.current.innerHTML !== html) {
         noteEditorRef.current.innerHTML = html;
       }
@@ -213,6 +239,7 @@ function App() {
       }
     });
 
+    // "말하는 사람" 표시용 이벤트
     socket.on("speaking", ({ socketId, isSpeaking }) => {
       setSpeakerId((prev) => {
         if (!isSpeaking && prev === socketId) return null;
@@ -221,6 +248,7 @@ function App() {
       });
     });
 
+    // "보드 필기 중인 사람" 표시용 이벤트
     socket.on("board-active", ({ socketId, isActive }) => {
       setBoardUserId((prev) => {
         if (!isActive && prev === socketId) return null;
@@ -229,6 +257,7 @@ function App() {
       });
     });
 
+    // 컴포넌트 언마운트 시 소켓 연결 해제
     return () => {
       socket.disconnect();
     };
@@ -236,53 +265,55 @@ function App() {
   }, []);
 
   // ─────────────────────────────────────
-  // 공유 메모 선택 변화 → B/I/U/S 버튼 상태 반영
+  // 7. 공유 메모 선택 변경 감지 → B/I/U/S 버튼 활성 상태 동기화
   // ─────────────────────────────────────
   useEffect(() => {
     const onSelectionChange = () => {
       if (!noteEditorRef.current) return;
-      // 메모 창이 포커스일 때만 상태 갱신
+      // 메모 에디터에 포커스가 있을 때만 포맷 상태를 읽음
       if (document.activeElement !== noteEditorRef.current) return;
-      refreshActiveFormats(); // 앞에서 만든 함수
+      refreshActiveFormats();
     };
 
     document.addEventListener("selectionchange", onSelectionChange);
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
     };
-  }, []); // <-- 이것이 두 번째 useEffect
+  }, []); // noteEditorRef는 ref이므로 deps에 넣지 않아도 됨
 
   // ─────────────────────────────────────
-  // 방 입장
+  // 8. 방 입장 버튼
   // ─────────────────────────────────────
   const handleJoinRoom = () => {
     if (!socketRef.current) return;
+    // 서버에 방ID + username 전달 → room-users 브로드캐스트
     socketRef.current.emit("join-room", { roomId, username });
     setIsJoined(true);
   };
 
   // ─────────────────────────────────────
-  // 로컬 카메라/마이크 (마이크 게인 포함)
+  // 9. 로컬 카메라/마이크 획득 (마이크 게인 포함)
   // ─────────────────────────────────────
   const ensureLocalStream = async () => {
+    // 이미 스트림이 있으면 재요청하지 않음
     if (localStreamRef.current) return;
 
     try {
-      // 1) 카메라 + 마이크 원본 스트림
+      // 1) 카메라 + 마이크 원본 스트림 요청
       const rawStream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
       rawLocalStreamRef.current = rawStream;
 
-      // 2) Web Audio로 마이크 볼륨 조절용 그래프 구성
+      // 2) Web Audio API 구성: 마이크 볼륨 조절을 위한 그래프
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
 
       const source = audioCtx.createMediaStreamSource(rawStream);
       const gainNode = audioCtx.createGain();
-      gainNode.gain.value = micVolume; // 초기값
+      gainNode.gain.value = micVolume; // 초기 게인 = 현재 슬라이더 값
       micGainNodeRef.current = gainNode;
 
       const dest = audioCtx.createMediaStreamDestination();
@@ -290,7 +321,7 @@ function App() {
       source.connect(gainNode);
       gainNode.connect(dest);
 
-      // 3) 최종 송출용 스트림: 비디오(원본) + 오디오(게인 적용)
+      // 3) 최종 WebRTC 송출용 스트림: 비디오(원본) + 오디오(게인 적용)
       const processedStream = new MediaStream();
       rawStream.getVideoTracks().forEach((track) => {
         processedStream.addTrack(track);
@@ -301,12 +332,13 @@ function App() {
 
       localStreamRef.current = processedStream;
 
+      // 내 비디오 DOM에 스트림 연결
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = processedStream;
       }
 
       console.log("로컬 스트림(마이크 게인 포함) 획득");
-      startVoiceDetection(); // 말하기 감지
+      startVoiceDetection(); // 내 마이크 레벨 분석 + speaking 이벤트 시작
     } catch (err) {
       console.error("getUserMedia 실패:", err);
       alert("카메라/마이크 접근 실패");
@@ -314,29 +346,33 @@ function App() {
   };
 
   // ─────────────────────────────────────
-  // PeerConnection 생성
+  // 10. PeerConnection 생성 함수 (1:N 구조의 핵심)
   // ─────────────────────────────────────
   const createPeerConnection = (peerId, peerName, isCaller) => {
+    // 이미 존재하는 PC가 있다면 재사용
     if (peersRef.current[peerId]?.pc) {
       return peersRef.current[peerId].pc;
     }
 
+    // RTCPeerConnection 생성
     const pc = new RTCPeerConnection(pcConfig);
 
+    // peersRef에 PC 및 메타정보 저장
     peersRef.current[peerId] = {
       ...(peersRef.current[peerId] || {}),
       pc,
       username: peerName || peersRef.current[peerId]?.username || "user",
-      hasCam: false,
+      hasCam: false, // 아직 상대 영상이 도착하지 않았다는 의미
     };
 
-    // 내 트랙 추가
+    // 1) 내 로컬 트랙들을 이 PC에 추가 (카메라/마이크, 화면 공유 등)
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
         pc.addTrack(track, localStreamRef.current);
       });
     }
 
+    // 2) ICE 후보가 생길 때마다 서버로 전송 → 상대에게 전달
     pc.onicecandidate = (event) => {
       if (event.candidate && socketRef.current) {
         socketRef.current.emit("webrtc-ice-candidate", {
@@ -347,18 +383,22 @@ function App() {
       }
     };
 
+    // 3) 상대방의 트랙(비디오/오디오)이 들어올 때 처리
     pc.ontrack = (event) => {
       const [stream] = event.streams;
       const peerInfo = peersRef.current[peerId];
 
       if (event.track.kind === "video") {
+        // 첫 비디오 트랙: "카메라" 라고 간주
         if (!peerInfo.hasCam) {
           peersRef.current[peerId].hasCam = true;
           setRemoteStreams((prev) => {
             const exist = prev.find((p) => p.id === peerId);
             if (exist) {
+              // 기존 객체가 있으면 stream만 교체
               return prev.map((p) => (p.id === peerId ? { ...p, stream } : p));
             }
+            // 처음 들어온 유저면 새로 추가
             return [
               ...prev,
               {
@@ -369,6 +409,7 @@ function App() {
             ];
           });
         } else {
+          // 두 번째 이후 비디오 트랙은 화면 공유로 간주하여 screenVideoRef에 연결
           if (screenVideoRef.current) {
             screenVideoRef.current.srcObject = stream;
           }
@@ -378,7 +419,7 @@ function App() {
       }
     };
 
-    // 내가 Caller 인 경우에만 Offer 생성
+    // 4) Caller일 때만 Offer 생성해서 전송
     if (isCaller && socketRef.current) {
       pc.createOffer()
         .then((offer) => {
@@ -395,7 +436,10 @@ function App() {
     return pc;
   };
 
-  // 화상 시작 버튼
+  // ─────────────────────────────────────
+  // 11. "화상 시작" 버튼 클릭 시
+  //  - 로컬 스트림 확보 후, 모든 피어와 재협상(Offer) 진행
+  // ─────────────────────────────────────
   const handleCallStart = async () => {
     if (!isJoined) {
       alert("먼저 방에 입장하세요.");
@@ -403,14 +447,14 @@ function App() {
     }
     await ensureLocalStream();
 
-    // 이미 존재하는 모든 PeerConnection에 내 트랙을 붙이고, 재협상(Offer) 보내기
+    // 이미 존재하는 모든 PeerConnection에 내 트랙을 붙이고 재협상
     if (localStreamRef.current && socketRef.current) {
       const entries = Object.entries(peersRef.current);
       for (const [peerId, info] of entries) {
         const pc = info.pc;
         if (!pc) continue;
 
-        // 같은 kind 트랙을 중복으로 addTrack 하지 않도록 방어
+        // 같은 kind 트랙을 중복 추가하지 않도록 방어
         const existingKinds = pc
           .getSenders()
           .map((s) => (s.track ? s.track.kind : null));
@@ -436,7 +480,10 @@ function App() {
     }
   };
 
-  // 마이크 음소거 토글 (게인 + 트랙 + 모든 PeerConnection 오디오 완전 차단)
+  // ─────────────────────────────────────
+  // 12. 마이크 음소거 토글
+  //  - Web Audio 게인 + track.enabled + 모든 PeerConnection 오디오 동기 OFF
+  // ─────────────────────────────────────
   const toggleMute = () => {
     if (
       !micGainNodeRef.current &&
@@ -451,12 +498,12 @@ function App() {
       const next = !prev;
       isMutedRef.current = next;
 
-      // 1) Web Audio 게인 제어
+      // 1) Web Audio 게인으로 음량 0 / 복구
       if (micGainNodeRef.current) {
         micGainNodeRef.current.gain.value = next ? 0 : micVolume;
       }
 
-      // 2) 로컬 가공 스트림 오디오 트랙 on/off
+      // 2) 로컬(가공 후) 스트림 오디오 트랙 ON/OFF
       if (localStreamRef.current) {
         localStreamRef.current.getAudioTracks().forEach((track) => {
           track.enabled = !next;
@@ -469,7 +516,7 @@ function App() {
         });
       }
 
-      // 3) 원본 스트림 오디오 트랙도 방어적으로 off
+      // 3) 원본 스트림도 방어적으로 동일하게 처리
       if (rawLocalStreamRef.current) {
         rawLocalStreamRef.current.getAudioTracks().forEach((track) => {
           track.enabled = !next;
@@ -482,7 +529,7 @@ function App() {
         });
       }
 
-      // 4) 이미 만들어진 모든 PeerConnection 의 audio sender 도 off
+      // 4) 이미 만들어진 모든 PeerConnection 의 오디오 sender track도 OFF
       Object.values(peersRef.current).forEach(({ pc }) => {
         if (!pc) return;
         pc.getSenders().forEach((sender) => {
@@ -503,7 +550,8 @@ function App() {
   };
 
   // ─────────────────────────────────────
-  // 화면 공유
+  // 13. 화면 공유 시작
+  //  - getDisplayMedia → 각 PeerConnection에 화면 트랙 추가
   // ─────────────────────────────────────
   const handleShareScreen = async () => {
     try {
@@ -522,6 +570,7 @@ function App() {
         screenVideoRef.current.srcObject = displayStream;
       }
 
+      // 모든 참가자에게 화면 트랙 추가 후 재협상
       for (const peerId of Object.keys(peersRef.current)) {
         const pc = peersRef.current[peerId].pc;
         const sender = pc.addTrack(screenTrack, displayStream);
@@ -536,8 +585,10 @@ function App() {
         });
       }
 
+      // "누가 화면 공유를 시작했다"는 신호만 서버를 통해 전파
       socketRef.current.emit("screen-share-start", { roomId });
 
+      // 사용자가 OS 창에서 "공유 중지" 눌렀을 때 처리
       screenTrack.onended = () => {
         handleStopShare();
       };
@@ -546,8 +597,12 @@ function App() {
     }
   };
 
+  // ─────────────────────────────────────
+  // 14. 화면 공유 종료
+  // ─────────────────────────────────────
   const handleStopShare = async () => {
     try {
+      // 1) 내 화면 공유 스트림 정리
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach((t) => t.stop());
         screenStreamRef.current = null;
@@ -556,6 +611,7 @@ function App() {
         screenVideoRef.current.srcObject = null;
       }
 
+      // 2) 각 PeerConnection에서 화면 트랙 제거 후 재협상
       for (const peerId of Object.keys(screenSenderRef.current)) {
         const pc = peersRef.current[peerId]?.pc;
         const sender = screenSenderRef.current[peerId];
@@ -572,17 +628,20 @@ function App() {
       }
       screenSenderRef.current = {};
 
-      socketRef.current.emit("screen-share-stop", { roomId });
+      // 3) 서버에 공유 종료 이벤트 전파
+      if (socketRef.current) {
+        socketRef.current.emit("screen-share-stop", { roomId });
+      }
     } catch (err) {
       console.error("화면 공유 종료 오류:", err);
     }
   };
 
   // ─────────────────────────────────────
-  // 통화 종료 + 방 나가기
+  // 15. 통화 종료 + 방 나가기 (나가기 버튼)
   // ─────────────────────────────────────
   const handleHangup = () => {
-    // 0) 방에 참가 중이면 먼저 서버에 알림
+    // 0) 서버에 "이 방에서 나간다"는 이벤트 알림
     if (socketRef.current && isJoined) {
       socketRef.current.emit("leave-room", { roomId });
     }
@@ -590,13 +649,13 @@ function App() {
     // 1) 화면 공유 정리
     handleStopShare();
 
-    // 2) 로컬 스트림 정리
+    // 2) 내 로컬 스트림 트랙 stop
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop());
       localStreamRef.current = null;
     }
 
-    // 3) 모든 PeerConnection 정리
+    // 3) 모든 PeerConnection 닫기
     Object.values(peersRef.current).forEach(({ pc }) => {
       if (!pc) return;
       pc.getSenders().forEach((s) => {
@@ -607,11 +666,11 @@ function App() {
     peersRef.current = {};
     setRemoteStreams([]);
 
-    // 4) 비디오 요소 정리
+    // 4) 화면에 연결된 비디오 srcObject 초기화
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (screenVideoRef.current) screenVideoRef.current.srcObject = null;
 
-    // 5) 상태 리셋
+    // 5) 상태 초기화
     setIsJoined(false);
     setIsMuted(false);
     isMutedRef.current = false;
@@ -620,7 +679,7 @@ function App() {
   };
 
   // ─────────────────────────────────────
-  // 채팅 전송
+  // 16. 채팅 전송
   // ─────────────────────────────────────
   const handleSendMessage = () => {
     if (!chatInput.trim()) return;
@@ -637,18 +696,18 @@ function App() {
   };
 
   // ─────────────────────────────────────
-  // 화이트보드
+  // 17. 화이트보드: 마우스 이벤트 (그리기/지우기)
   // ─────────────────────────────────────
   const handleCanvasMouseDown = (e) => {
     if (!isBoardDrawMode) return;
     const { offsetX, offsetY } = e.nativeEvent;
 
-    // 🔹 지우개 + 드래그 ON  → 영역 지우개 시작 (사각형)
+    // 🔹 지우개 + 드래그 ON → 영역 지우기 시작 (사각형 지정 시작점)
     if (isEraserMode && isEraserDrag) {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
-      // 현재 화면 저장 (미리보기용)
+      // 현재 화면 전체를 저장해 두었다가 드래그 미리보기용으로 사용
       dragPreviewImageRef.current = ctx.getImageData(
         0,
         0,
@@ -661,12 +720,12 @@ function App() {
         y0: offsetY,
         x1: offsetX,
         y1: offsetY,
-        rect: true, // 영역 지우개 플래그
+        rect: true, // 영역 지우개 모드 플래그
       };
       return;
     }
 
-    // 🔹 그 외(펜 / 일반 지우개) → 선 따라 그리기/지우기
+    // 🔹 일반 펜 / 일반 지우개 → 선을 따라가며 그리기/지우기
     drawing.current = { x: offsetX, y: offsetY };
   };
 
@@ -674,7 +733,7 @@ function App() {
     if (!drawing.current || !isBoardDrawMode) return;
     const { offsetX, offsetY } = e.nativeEvent;
 
-    // 🔹 지우개 + 드래그 ON  → 사각형 미리보기만 그림
+    // 🔹 영역 지우개 모드: 마우스를 움직이는 동안 "미리보기 사각형"만 그림
     if (isEraserMode && isEraserDrag && drawing.current.rect) {
       drawing.current = {
         ...drawing.current,
@@ -686,10 +745,10 @@ function App() {
       if (!canvas || !dragPreviewImageRef.current) return;
       const ctx = canvas.getContext("2d");
 
-      // 저장해둔 원본 화면으로 되돌린 뒤
+      // 저장해둔 원래 화면으로 되돌린 뒤
       ctx.putImageData(dragPreviewImageRef.current, 0, 0);
 
-      // 미리보기용 흰색 사각형 테두리 그리기
+      // 그 위에 흰색 점선 사각형으로 "지울 영역"만 표시
       const { x0, y0, x1, y1 } = drawing.current;
       const left = Math.min(x0, x1);
       const top = Math.min(y0, y1);
@@ -700,14 +759,14 @@ function App() {
       ctx.globalCompositeOperation = "source-over";
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 1;
-      ctx.setLineDash([4, 2]); // 점선 느낌 (원하면 삭제)
+      ctx.setLineDash([4, 2]);
       ctx.strokeRect(left, top, width, height);
       ctx.restore();
 
-      return; // 여기서는 실제 지우기는 하지 않음
+      return; // 아직 실제로는 지우지 않음
     }
 
-    // 🔹 펜 / 일반 지우개 (선 지우기) -------------------------
+    // 🔹 일반 펜 / 일반 지우개 모드: 선을 따라 그리기 or 지우기
     const x0 = drawing.current.x;
     const y0 = drawing.current.y;
     const x1 = offsetX;
@@ -717,7 +776,9 @@ function App() {
       ? { x0, y0, x1, y1, mode: "erase", size: eraserSize }
       : { x0, y0, x1, y1, mode: "draw", color: penColor, width: penWidth };
 
+    // 내 화면에 즉시 반영
     drawStroke(stroke);
+    // 다른 사람들에게도 stroke 정보 전송
     if (socketRef.current) {
       socketRef.current.emit("draw", { roomId, stroke });
     }
@@ -731,14 +792,14 @@ function App() {
       return;
     }
 
-    // 🔹 영역 지우개 모드일 때 (지우개 ON + 드래그 ON)
+    // 🔹 마우스 떼는 시점: 영역 지우개 모드라면 실제로 해당 영역을 지움
     if (isEraserMode && isEraserDrag && drawing.current.rect) {
       const { x0, y0, x1, y1 } = drawing.current;
 
-      // 미리보기 전에 저장해둔 원본 이미지로 복원
       const canvas = canvasRef.current;
       if (canvas && dragPreviewImageRef.current) {
         const ctx = canvas.getContext("2d");
+        // 미리보기 사각형을 지우고, 저장해둔 원래 그림으로 복원
         ctx.putImageData(dragPreviewImageRef.current, 0, 0);
       }
 
@@ -760,14 +821,17 @@ function App() {
         socketRef.current.emit("draw", { roomId, stroke });
       }
 
-      // 미리보기 이미지 초기화
+      // 미리보기 이미지 메모리 해제
       dragPreviewImageRef.current = null;
     }
 
     drawing.current = false;
   };
 
-  // ======== 여기부터 새로 추가 ==========
+  // ─────────────────────────────────────
+  // 18. 실제 선 그리기/지우기 구현 (내 화면 기준)
+  //     - draw 이벤트를 받았을 때도 이 함수를 그대로 사용
+  // ─────────────────────────────────────
   const drawStroke = (stroke) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -775,7 +839,7 @@ function App() {
 
     ctx.save();
 
-    // 🔹 1) 영역 지우개 (사각형 전체 지우기)
+    // 1) 영역 지우개: 사각형 전체를 지움
     if (stroke.mode === "erase-rect") {
       ctx.globalCompositeOperation = "destination-out";
       const width = stroke.x1 - stroke.x0;
@@ -785,13 +849,13 @@ function App() {
       return;
     }
 
-    // 🔹 2) 일반 지우개(선 지우기)
+    // 2) 일반 지우개 (선 지우기)
     if (stroke.mode === "erase") {
       ctx.globalCompositeOperation = "destination-out";
       ctx.lineWidth = stroke.size || 16;
       ctx.lineCap = "round";
     } else {
-      // 🔹 3) 펜 그리기
+      // 3) 펜으로 그리기
       ctx.globalCompositeOperation = "source-over";
       ctx.strokeStyle = stroke.color || "#ff0000";
       ctx.lineWidth = stroke.width || 2;
@@ -807,8 +871,7 @@ function App() {
     ctx.restore();
   };
 
-  // ========= 여기까지 새로 추가 ==========
-
+  // 화이트보드 전체 지우기 (내 화면에서만)
   const handleClearCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -817,20 +880,18 @@ function App() {
   };
 
   // ─────────────────────────────────────
-  // 공유 메모
+  // 19. 공유 메모 포맷 상태(B/I/U/S) 갱신
   // ─────────────────────────────────────
-
-  // execCommand 이후에 현재 B/I/U/S 상태를 읽어서 state로 반영
   const refreshActiveFormats = () => {
     try {
       setActiveFormats({
         bold: document.queryCommandState("bold"),
         italic: document.queryCommandState("italic"),
         underline: document.queryCommandState("underline"),
-        strike: document.queryCommandState("strikeThrough"), // strike 키
+        strike: document.queryCommandState("strikeThrough"),
       });
     } catch {
-      // 에러가 나더라도 앱이 죽지 않도록 기본값
+      // execCommand가 에러를 내더라도 앱이 죽지 않도록 방어
       setActiveFormats({
         bold: false,
         italic: false,
@@ -840,30 +901,23 @@ function App() {
     }
   };
 
-  // 현재 텍스트 스타일(B/I/U/S)이 활성화되어 있는지 확인하는 함수
-  // const isFormatActive = (command) => {
-  //   try {
-  //     return document.queryCommandState(command);
-  //   } catch {
-  //     return false;
-  //   }
-  // };
-
-  // 현재 텍스트 스타일(B/I/U/S)이 활성화되어 있는지 확인 (state 사용)
+  // 현재 스타일이 켜져있는지 여부를 state로 확인
   const isFormatActive = (key) => {
     return !!activeFormats[key];
   };
 
+  // 메모 내용이 바뀔 때마다 서버에 HTML 전체 전송
   const handleNoteInput = () => {
     if (!noteEditorRef.current) return;
     const html = noteEditorRef.current.innerHTML;
     if (socketRef.current) {
       socketRef.current.emit("note-update", { roomId, text: html });
     }
-    // 타이핑으로 서식이 바뀌었을 수 있으므로 상태 갱신
+    // 입력으로 인해 포맷 상태가 변했을 수 있으니 다시 읽어오기
     refreshActiveFormats();
   };
 
+  // B/I/U/S 버튼 클릭 시 execCommand로 스타일 적용
   const applyNoteFormat = (command, value = null) => {
     if (!noteEditorRef.current) return;
     noteEditorRef.current.focus();
@@ -873,12 +927,10 @@ function App() {
     if (socketRef.current) {
       socketRef.current.emit("note-update", { roomId, text: html });
     }
-
-    // 버튼 눌러서 서식을 바꿨으니 상태도 다시 읽어오기
     refreshActiveFormats();
   };
 
-  // 메모 글자 크기 변경 (선택/커서 위치에 px 적용)
+  // 메모 글자 크기 변경: 선택 영역 또는 커서 위치에 px 단위 스타일 적용
   const handleNoteFontSizeChange = (e) => {
     const px = Number(e.target.value); // 12, 14, 18, 22
     setNoteFontSize(px);
@@ -886,7 +938,6 @@ function App() {
     if (!noteEditorRef.current) return;
     const editor = noteEditorRef.current;
 
-    // 1) 먼저 에디터 포커스 복원 → selection 되살리기
     editor.focus();
 
     const sel = window.getSelection();
@@ -894,24 +945,18 @@ function App() {
 
     const range = sel.getRangeAt(0);
 
-    // 선택 영역이 에디터 안에 있을 때만
+    // 선택 영역이 메모 에디터 내부에 있는 경우에만 처리
     if (!editor.contains(range.commonAncestorContainer)) return;
 
-    // ─────────────────────────────
-    // A. 드래그로 선택된 텍스트가 있는 경우
-    //    → 모든 자손의 font-size 를 강제로 px 로 통일
-    // ─────────────────────────────
+    // A. 텍스트를 드래그해서 선택한 경우 → 선택 영역 전체에 font-size 적용
     if (!sel.isCollapsed) {
       const fragment = range.extractContents();
 
-      // 선택된 내용을 감쌀 wrapper
       const wrapper = document.createElement("span");
       wrapper.appendChild(fragment);
 
-      // wrapper 및 모든 자손 element 의 font-size 를 통일
       wrapper.style.fontSize = `${px}px`;
       wrapper.querySelectorAll("*").forEach((el) => {
-        // 기존 font-size 제거 후 새 크기로 설정
         el.style.fontSize = `${px}px`;
         if (el.tagName === "FONT") {
           el.removeAttribute("size");
@@ -920,17 +965,13 @@ function App() {
 
       range.insertNode(wrapper);
 
-      // 커서를 wrapper 뒤로 이동 (편의)
       sel.removeAllRanges();
       const newRange = document.createRange();
       newRange.setStartAfter(wrapper);
       newRange.collapse(true);
       sel.addRange(newRange);
     } else {
-      // ─────────────────────────────
-      // B. 커서만 있는 경우
-      //    → 이후 입력될 글자의 기본 크기를 지정
-      // ─────────────────────────────
+      // B. 커서만 있는 경우 → 이후 입력될 글자의 기본 크기를 변경
       const span = document.createElement("span");
       span.style.fontSize = `${px}px`;
 
@@ -946,23 +987,22 @@ function App() {
       sel.addRange(newRange);
     }
 
-    // 변경된 HTML을 서버에 공유
     const html = editor.innerHTML;
     if (socketRef.current) {
       socketRef.current.emit("note-update", { roomId, text: html });
     }
 
-    // B/I/U/S 상태 갱신
     refreshActiveFormats();
   };
 
   // ─────────────────────────────────────
-  // 보드 필기 상태
+  // 20. 보드 필기/지우개 모드 토글
   // ─────────────────────────────────────
   const toggleBoardDrawMode = () => {
     setIsBoardDrawMode((prev) => {
       const next = !prev;
 
+      // 자신의 보드 필기 상태를 서버에 전파 → 다른 클라이언트에서 하이라이트 표시
       if (socketRef.current && isJoined) {
         socketRef.current.emit("board-active", {
           roomId,
@@ -971,7 +1011,7 @@ function App() {
       }
       setBoardUserId(next ? mySocketId : null);
 
-      // 🔹 보드 필기 OFF가 되면 지우개 관련 모드도 모두 OFF
+      // 보드 OFF가 되면 지우개 관련 모드도 모두 OFF
       if (!next) {
         setIsEraserMode(false);
         setIsEraserDrag(false);
@@ -981,28 +1021,27 @@ function App() {
     });
   };
 
-  // 보드 필기 OFF면 아예 동작하지 않도록 가드 추가
+  // 보드 OFF일 때는 지우개 버튼 자체가 동작하지 않도록 가드
   const toggleEraserMode = () => {
-    if (!isBoardDrawMode) return; // 보드 OFF일 때는 무시
+    if (!isBoardDrawMode) return;
 
     setIsEraserMode((prev) => {
       const next = !prev;
       if (!next) {
-        // 지우개를 끄면 드래그도 같이 OFF
+        // 지우개를 끄면 드래그 영역 지우기도 함께 OFF
         setIsEraserDrag(false);
       }
       return next;
     });
   };
 
-  // 보드 OFF 이거나 지우개 OFF면 드래그 버튼도 동작 안 함
+  // 지우개가 켜져 있을 때만 드래그 지우기 허용
   const toggleEraserDragMode = () => {
     if (!isBoardDrawMode || !isEraserMode) return;
     setIsEraserDrag((prev) => !prev);
   };
 
-  // 여기까지 새 코드
-
+  // 캔버스 CSS 클래스 (마우스 커서 모양 변경용)
   const canvasClassName = [
     "screen-canvas",
     isBoardDrawMode && !isEraserMode ? "pen-cursor" : "",
@@ -1012,13 +1051,13 @@ function App() {
     .join(" ");
 
   // ─────────────────────────────────────
-  // 말하는 사람 감지 + 마이크 레벨바
+  // 21. 말하는 사람 감지 + 마이크 레벨바 갱신
   // ─────────────────────────────────────
   const startVoiceDetection = () => {
     const baseStream = localStreamRef.current || rawLocalStreamRef.current;
     if (!baseStream || !socketRef.current || !roomId) return;
 
-    const selfId = socketRef.current.id; // 항상 최신 소켓 ID 사용
+    const selfId = socketRef.current.id; // speaking 이벤트에 사용할 내 소켓 ID
 
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const audioCtx = new AudioContext();
@@ -1047,10 +1086,10 @@ function App() {
             roomId,
             isSpeaking: false,
           });
-          // 내가 말하다가 멈춘 경우만 내 하이라이트 제거
+          // 내가 말하다가 멈춘 경우 내 스피킹 하이라이트 제거
           setSpeakerId((prev) => (prev === selfId ? null : prev));
         }
-        setMicLevel(0); // 레벨바도 0으로
+        setMicLevel(0);
         requestAnimationFrame(check);
         return;
       }
@@ -1060,18 +1099,18 @@ function App() {
       for (let v of dataArray) sum += v;
       const volume = sum / dataArray.length;
 
-      // 레벨바 (0~1로 정규화)
+      // 0~1 로 정규화한 값으로 레벨바에 표시
       const normalized = Math.min(volume / 80, 1);
       setMicLevel(normalized);
 
-      const isSpeaking = volume > 40;
+      const isSpeaking = volume > 40; // 임계값 기준으로 말하는지 판단
       if (isSpeaking !== lastSpeaking) {
         lastSpeaking = isSpeaking;
         socketRef.current.emit("speaking", {
           roomId,
           isSpeaking,
         });
-        // 본인 브라우저에서도 내 타일에 speaking 하이라이트 적용
+        // 내 화면에서도 내 타일에 speaking 하이라이트 적용
         setSpeakerId(isSpeaking ? selfId : null);
       }
       requestAnimationFrame(check);
@@ -1081,33 +1120,29 @@ function App() {
   };
 
   // ─────────────────────────────────────
-  // 스피커 / 마이크 볼륨 핸들러
+  // 22. 스피커/마이크 볼륨 제어
   // ─────────────────────────────────────
-
-  // 전체 스피커 on/off
   const toggleSpeakerMute = () => {
     setIsSpeakerMuted((prev) => !prev);
   };
 
-  // 전체 스피커 볼륨
   const handleSpeakerVolumeChange = (e) => {
     const vol = Number(e.target.value);
     setSpeakerVolume(vol);
     setIsSpeakerMuted(vol === 0);
   };
 
-  // 마이크 볼륨 슬라이더
   const handleMicVolumeChange = (e) => {
     const v = Number(e.target.value);
     setMicVolume(v);
 
-    // 음소거 상태가 아닐 때만 게인 반영
+    // 음소거 상태가 아닐 때만 게인 값 반영
     if (!isMutedRef.current && micGainNodeRef.current) {
       micGainNodeRef.current.gain.value = v;
     }
   };
 
-  // 스피커 볼륨이 바뀔 때 실제 원격 비디오 음량 적용
+  // 스피커 볼륨이 바뀌면 모든 원격 비디오의 volume/muted 반영
   useEffect(() => {
     const vol = isSpeakerMuted ? 0 : speakerVolume;
 
@@ -1119,7 +1154,7 @@ function App() {
   }, [isSpeakerMuted, speakerVolume, remoteStreams]);
 
   // ─────────────────────────────────────
-  // 상단 정렬 순서 (socketId 오름차순)
+  // 23. 상단 영상 스트립 정렬 순서 (socketId 오름차순)
   // ─────────────────────────────────────
   const participantIds = [mySocketId, ...remoteStreams.map((p) => p.id)].filter(
     Boolean
@@ -1127,15 +1162,15 @@ function App() {
   const sortedIds = Array.from(new Set(participantIds)).sort();
   const orderMap = {};
   sortedIds.forEach((id, idx) => {
-    orderMap[id] = idx;
+    orderMap[id] = idx; // CSS flex order 값으로 사용
   });
 
   // ─────────────────────────────────────
-  // 렌더링
+  // 24. 렌더링: 전체 레이아웃
   // ─────────────────────────────────────
   return (
     <div className="app-root">
-      {/* 상단 바 */}
+      {/* 상단 컨트롤 바: 방ID, 이름, 화상 시작, 오디오/화면 컨트롤 */}
       <div className="top-bar">
         <span className="top-bar-title">WebRTC 1:N (ver2.1) </span>
 
@@ -1158,7 +1193,7 @@ function App() {
 
         <button onClick={handleCallStart}>화상 시작</button>
 
-        {/* 스피커 버튼 + 볼륨 */}
+        {/* 스피커 버튼 + 볼륨 슬라이더 */}
         <div className="audio-control-group">
           <button
             className={`speaker-btn ${isSpeakerMuted ? "muted" : ""}`}
@@ -1176,7 +1211,7 @@ function App() {
             value={speakerVolume}
             onChange={handleSpeakerVolumeChange}
           />
-          {/* 파란 레벨바는 사용하지 않으므로 CSS에서 숨김 처리됨 */}
+          {/* 스피커 레벨바는 디자인상 숨김 처리 */}
           <div className="level-bar speaker-level">
             <div
               className="level-inner"
@@ -1187,7 +1222,7 @@ function App() {
           </div>
         </div>
 
-        {/* 마이크 버튼 + 볼륨 + 레벨 */}
+        {/* 마이크 버튼 + 볼륨 슬라이더 + 레벨바 */}
         <div className="audio-control-group">
           <button
             className={`mic-btn ${isMuted ? "muted" : ""}`}
@@ -1221,12 +1256,12 @@ function App() {
         </button>
       </div>
 
-      {/* 메인 레이아웃 */}
+      {/* 메인 레이아웃: 왼쪽(영상+보드) / 오른쪽(채팅+메모) */}
       <div className="main-layout">
-        {/* 왼쪽: 영상 + 보드 */}
+        {/* 왼쪽: 참가자 영상 스트립 + 하단 보드 */}
         <div className="left-side">
           <div className="video-strip">
-            {/* 내 화면 */}
+            {/* 내 화면 타일 */}
             <div
               className={
                 "video-panel" +
@@ -1242,7 +1277,7 @@ function App() {
               </span>
             </div>
 
-            {/* 원격 참가자들 */}
+            {/* 원격 참가자 영상 타일 */}
             {remoteStreams.map((p) => (
               <div
                 key={p.id}
@@ -1268,7 +1303,7 @@ function App() {
                     }}
                   />
                 ) : (
-                  // 🔹 영상이 없으면 회색 배경 + 안내 텍스트
+                  // p.offline 표시용 기본 UI
                   <div className="video-offline-text">연결 종료</div>
                 )}
 
@@ -1280,7 +1315,7 @@ function App() {
             ))}
           </div>
 
-          {/* 하단: 화면 공유 + 보드 */}
+          {/* 하단: 화면 공유 + 보드 캔버스 */}
           <div className="board-wrapper">
             <div className="board-header">
               ✍️ 화면 공유 창에서 그림/메모를 입력하면 실시간으로 공유됩니다.📝
@@ -1308,6 +1343,7 @@ function App() {
               </div>
             </div>
 
+            {/* 보드 컨트롤 버튼들 */}
             <div className="board-controls">
               <button
                 className={isBoardDrawMode ? "toggle-on" : ""}
@@ -1316,7 +1352,7 @@ function App() {
                 보드 필기 {isBoardDrawMode ? "ON" : "OFF"}
               </button>
 
-              {/* 보드 OFF일 때는 지우개 버튼 비활성화 */}
+              {/* 보드 OFF이면 지우개는 비활성화 */}
               <button
                 className={isEraserMode ? "toggle-on" : ""}
                 onClick={toggleEraserMode}
@@ -1373,8 +1409,9 @@ function App() {
           </div>
         </div>
 
-        {/* 오른쪽: 채팅 + 공유 메모 */}
+        {/* 오른쪽: 채팅 패널 + 공유 메모 패널 */}
         <div className="right-side">
+          {/* 채팅 */}
           <div className="chat-panel">
             <div className="chat-title">채팅 화면</div>
 
@@ -1390,6 +1427,7 @@ function App() {
                   }
                 >
                   {m.isSystem ? (
+                    // 시스템 메시지는 이탤릭/회색
                     <span>{m.message}</span>
                   ) : (
                     <>
@@ -1426,7 +1464,7 @@ function App() {
                   className="chat-color-picker"
                 />
 
-                {/* 글자크기 선택 (전송 버튼 위) */}
+                {/* 채팅 글씨 크기 선택 */}
                 <select
                   className="chat-font-size"
                   value={chatFontSize}
@@ -1445,20 +1483,21 @@ function App() {
             </div>
           </div>
 
+          {/* 공유 메모 */}
           <div className="notes-panel">
             <div className="notes-title">공유 메모</div>
 
-            {/* 리치 텍스트 메모 영역 */}
+            {/* contentEditable 리치 텍스트 영역 */}
             <div
               className="notes-editor"
               ref={noteEditorRef}
               contentEditable
               suppressContentEditableWarning={true}
               onInput={handleNoteInput}
-              style={{ fontSize: "14px" }} // 에디터 기본값
+              style={{ fontSize: "14px" }} // 에디터 기본 폰트 크기
             />
 
-            {/* 포맷 툴바 */}
+            {/* 메모 포맷 툴바 (B/I/U/S/색상/크기) */}
             <div className="notes-toolbar">
               <button
                 className={isFormatActive("bold") ? "active" : ""}
@@ -1496,7 +1535,7 @@ function App() {
                 />
               </label>
 
-              {/* 오른쪽: size + select (하단 우측) */}
+              {/* 오른쪽: 글자 크기 선택 */}
               <div className="notes-toolbar-right">
                 <label className="notes-size-label">size</label>
                 <select

@@ -1,6 +1,10 @@
 /* src/App.css */
 
-/* 화면 전체 컨테이너 */
+/* 
+  전체 앱을 감싸는 최상위 컨테이너
+  - 화면 세로 전체(100vh)를 채우고
+  - 위에서 아래로(컬럼 방향) 영역을 배치합니다.
+*/
 .app-root {
   height: 100vh;
   display: flex;
@@ -9,35 +13,43 @@
   background: #f5f5f5;
 }
 
-/* ============= 상단 바 ============= */
+/* ============= 상단 바 (방 정보 + 버튼들) ============= */
 
+/* 
+  상단 고정 바 영역
+  - 방 ID, 이름 입력, 버튼들(방입장/화상시작/나가기 등)이 있는 줄
+*/
 .top-bar {
   padding: 8px 16px;
   border-bottom: 1px solid #ccc;
   background: #ffffff;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 12px; /* 항목들 사이 간격 */
 }
 
+/* 왼쪽 상단 제목(서비스 이름) */
 .top-bar-title {
   font-weight: 700;
   margin-right: 12px;
 }
 
+/* 상단 바 안의 label (설명 글자 크기 축소) */
 .top-bar label {
   font-size: 0.85rem;
 }
 
+/* 방 ID, 이름 입력창 스타일 */
 .top-bar input {
   padding: 4px 8px;
   margin-left: 4px;
   border-radius: 4px;
   border: 1px solid #ccc;
   font-size: 0.85rem;
-  width: 90px;
+  width: 90px; /* 너무 길지 않게 고정폭 */
 }
 
+/* 상단 바 공통 버튼 스타일 */
 .top-bar button {
   margin-left: 4px;
   padding: 6px 10px;
@@ -49,11 +61,12 @@
   cursor: pointer;
 }
 
+/* 버튼에 마우스를 올렸을 때 살짝 진해짐 */
 .top-bar button:hover {
   background: #3862af;
 }
 
-/* 나가기 버튼 */
+/* 나가기 버튼만 빨간색 계열로 강조 */
 .top-bar .leave-btn {
   background: #e74c3c;
 }
@@ -64,7 +77,10 @@
 
 /* ============= 오디오 컨트롤 공통 (스피커 + 마이크) ============= */
 
-/* 8-1. 스피커/마이크 버튼 + 슬라이더 + 레벨바 묶음 */
+/* 
+  스피커/마이크 버튼 + 볼륨 슬라이더 + 레벨바 묶음
+  - 상단 바 안에서 하나의 작은 그룹으로 붙어 다님
+*/
 .audio-control-group {
   display: flex;
   align-items: center;
@@ -72,13 +88,19 @@
   margin-left: 4px;
 }
 
-/* 마이크/스피커 볼륨 슬라이더 공통 */
+/* 
+  스피커/마이크 공통 볼륨 슬라이더
+  - 상단 바 안에서 너무 길지 않게 폭을 고정
+*/
 .top-bar .speaker-volume,
 .top-bar .mic-volume {
   width: 70px;
 }
 
-/* 8-2. 레벨바 공통 스타일 */
+/* 
+  오디오 레벨 표시 바 공통
+  - 회색 배경에 내부 막대가 넓어지면서 레벨 표시
+*/
 .level-bar {
   width: 60px;
   height: 6px;
@@ -87,24 +109,31 @@
   overflow: hidden;
 }
 
+/* 실제 움직이는 레벨 막대 (width 값으로 길이 조절) */
 .level-bar .level-inner {
   height: 100%;
   width: 0%;
   transition: width 0.15s linear;
 }
 
-/* 스피커 레벨바는 아예 숨김 */
+/* 
+  스피커 레벨바는 현재 디자인에서는 사용하지 않으므로 숨김 처리
+  (코드는 있지만 화면에는 안 보임)
+*/
 .level-bar.speaker-level {
   display: none;
 }
 
-/* 마이크 레벨(주황색)만 유지 */
+/* 마이크 레벨 막대 색상 (주황 톤) */
 .level-bar.mic-level .level-inner {
   background: #f39c12;
 }
 
 /* ============= 마이크 버튼 & 아이콘 ============= */
 
+/* 
+  마이크 ON/OFF 버튼 (아이콘 들어가는 네모)
+*/
 .top-bar .mic-btn {
   display: flex;
   align-items: center;
@@ -118,11 +147,15 @@
   cursor: pointer;
 }
 
+/* 마이크 버튼 hover 시 진한 파란색 */
 .top-bar .mic-btn:hover {
   background: #3862af;
 }
 
-/* 마이크 아이콘 기본 모양 */
+/* 
+  마이크 아이콘 기본 모양
+  - 흰색 테두리의 작은 캡슐 모양 (마이크 몸통)
+*/
 .mic-icon {
   position: relative;
   width: 14px;
@@ -131,7 +164,9 @@
   border: 2px solid #fff;
 }
 
-/* 받침대 */
+/* 
+  마이크 받침대 부분 (아래 가로선)
+*/
 .mic-icon::before {
   content: "";
   position: absolute;
@@ -143,7 +178,11 @@
   background: #fff;
 }
 
-/* 음소거 상태일 때 – 분홍 버튼 + 대각선 */
+/* 
+  마이크 음소거 상태일 때
+  - 버튼 배경 분홍색
+  - 아이콘 위에 대각선 슬래시 추가
+*/
 .top-bar .mic-btn.muted {
   background: #ff6fa8;
 }
@@ -161,6 +200,7 @@
 
 /* ============= 스피커 버튼 & 아이콘 ============= */
 
+/* 스피커 ON/OFF 버튼 (마이크 버튼과 비슷한 구조) */
 .top-bar .speaker-btn {
   display: flex;
   align-items: center;
@@ -178,14 +218,17 @@
   background: #444;
 }
 
-/* 스피커 아이콘 (몸통 + 소리 파동) */
+/* 
+  스피커 아이콘 영역
+  - 안에 before/after로 몸통과 파동을 그림
+*/
 .speaker-icon {
   position: relative;
   width: 16px;
   height: 14px;
 }
 
-/* 몸통 */
+/* 스피커 몸통(왼쪽 네모) */
 .speaker-icon::before {
   content: "";
   position: absolute;
@@ -197,7 +240,7 @@
   border-radius: 1px;
 }
 
-/* 파동 */
+/* 스피커 소리 파동(오른쪽 반원 모양) */
 .speaker-icon::after {
   content: "";
   position: absolute;
@@ -211,7 +254,7 @@
   border-radius: 50%;
 }
 
-/* 음소거 상태 – 분홍 + 대각선 */
+/* 스피커 음소거 상태 - 버튼 분홍색 */
 .top-bar .speaker-btn.muted {
   background: #ff6fa8;
 }
@@ -220,7 +263,9 @@
   background: #fff;
 }
 
-/* 파동 제거 + 슬래시 추가 */
+/* 
+  음소거 시: 소리 파동 대신 대각선 슬래시로 표시
+*/
 .top-bar .speaker-btn.muted .speaker-icon::after {
   content: "";
   position: absolute;
@@ -233,15 +278,23 @@
   transform: rotate(-45deg);
 }
 
-/* ============= 메인 레이아웃 ============= */
+/* ============= 메인 레이아웃 전체 ============= */
 
+/* 
+  상단 바 아래 전체 영역
+  - 왼쪽(영상+보드) / 오른쪽(채팅+메모) 두 칸으로 나눔
+*/
 .main-layout {
   flex: 1;
   display: flex;
-  min-height: 0;
+  min-height: 0; /* flex 안에서 내부 스크롤이 가능하도록 */
 }
 
-/* 왼쪽 영역 전체 (영상 스트립 + 보드) */
+/* 
+  왼쪽 큰 영역
+  - 위: 유저 영상 스트립
+  - 아래: 화면 공유 + 보드 캔버스
+*/
 .left-side {
   flex: 3;
   display: flex;
@@ -250,7 +303,11 @@
   gap: 8px;
 }
 
-/* 상단 영상 스트립: 가로 한 줄 + 스크롤 */
+/* 
+  상단 영상 스트립
+  - 참가자 영상 타일들이 가로로 나열
+  - 인원이 많으면 좌우 스크롤 가능
+*/
 .video-strip {
   display: flex;
   flex-wrap: nowrap;
@@ -261,7 +318,11 @@
   column-gap: 0.8vw;
 }
 
-/* 각 참가자 비디오 타일 */
+/* 
+  개별 참가자 비디오 타일
+  - 1줄에 최대 6개 기준 (flex-basis로 계산)
+  - 항상 흰색 테두리 4px 유지
+*/
 .video-panel {
   flex: 0 0 calc(100% / 6);
   max-width: calc(100% / 6);
@@ -274,33 +335,38 @@
   align-items: center;
   justify-content: center;
 
-  /* 항상 같은 두께의 흰색 테두리 + 레이아웃 고정 */
+  /* 고정된 흰색 테두리 (말하기 표시 시 색만 바뀜) */
   border: 4px solid #ffffff;
   box-sizing: border-box;
 }
 
-/* 말하는 사람: 테두리 색만 연두색으로 변경 (두께 그대로) */
+/* 현재 말하는 참가자: 테두리 색만 연두색으로 변경 */
 .video-panel.speaking {
   border-color: #9cff9c;
 }
 
-/* 보드 필기 중인 사람 */
+/* 보드 필기 중인 참가자: 안쪽 파란 강조 테두리(내부 그림자) */
 .video-panel.boarding {
   box-shadow: 0 0 0 3px #a0d8ff inset;
 }
 
-/* 둘 다인 경우 */
+/* 말하는 중 + 보드 필기 중인 경우 둘 다 표시 */
 .video-panel.speaking.boarding {
   border-color: #9cff9c;
   box-shadow: 0 0 0 3px #a0d8ff inset;
 }
 
+/* 비디오 태그 자체는 타일 영역을 가득 채움 */
 .video-panel video {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
+/* 
+  비디오 좌측 상단 이름 라벨
+  - 배경 반투명 검정 + 흰 글자
+*/
 .video-label {
   position: absolute;
   left: 6px;
@@ -312,32 +378,44 @@
   border-radius: 4px;
 }
 
-/* 개별 참가자 볼륨 슬라이더
+/* 
+  (참고용) 개별 참가자별 볼륨 슬라이더를 붙이고 싶을 때 사용 가능
+  현재는 주석 처리 상태
+*/
+/*
 .remote-volume-slider {
   position: absolute;
   left: 50%;
   bottom: 4px;
   transform: translateX(-50%);
   width: 80%;
-} */
+}
+*/
 
 /* ============= 보드(화면 공유 + 캔버스) ============= */
 
+/* 
+  화면 공유 영역 + 보드 컨트롤 전체 박스
+*/
 .board-wrapper {
   flex: 1;
   display: flex;
   flex-direction: column;
   border: 1px solid #ccc;
   border-radius: 8px;
-  background: #fff8dc;
+  background: #fff8dc; /* 연한 노랑 계열 배경 */
 }
 
+/* 보드 상단 안내 문구 줄 */
 .board-header {
   padding: 6px 10px;
   border-bottom: 1px solid #e0d6a6;
   font-size: 0.85rem;
 }
 
+/* 
+  보드 본문: 중앙에 화면 공유 + 캔버스 두기
+*/
 .board-body {
   flex: 1;
   padding: 10px;
@@ -346,6 +424,9 @@
   align-items: center;
 }
 
+/* 
+  실제 화면 공유 영상 + 그 위에 그리는 캔버스를 담는 박스
+*/
 .screen-share-container {
   position: relative;
   width: 848px;
@@ -356,6 +437,7 @@
   overflow: hidden;
 }
 
+/* 공유되는 영상(또는 검은 화면 기본 상태) */
 .screen-video {
   width: 100%;
   height: 100%;
@@ -363,6 +445,10 @@
   background: #000;
 }
 
+/* 
+  화면 위에 겹쳐서 그림을 그리는 캔버스
+  - 같은 위치/크기로 덮어씌움
+*/
 .screen-canvas {
   position: absolute;
   left: 0;
@@ -371,15 +457,17 @@
   height: 100%;
 }
 
-/* 보드 필기/지우개 커서 */
+/* 보드 필기 모드일 때 십자 커서 */
 .pen-cursor {
   cursor: crosshair;
 }
 
+/* 지우개 모드일 때 커서 */
 .eraser-cursor {
   cursor: cell;
 }
 
+/* 지우개 크기를 눈으로 확인하기 위한 미리보기 박스 */
 .eraser-preview {
   display: inline-block;
   margin-left: 4px;
@@ -387,7 +475,10 @@
   background: transparent;
 }
 
-/* 보드 하단: 컨트롤 버튼들 */
+/* 
+  보드 하단 컨트롤 영역
+  - 보드 ON/OFF, 지우개, 색상, 펜 굵기, 전체 지우기 등 버튼
+*/
 .board-controls {
   padding: 6px 10px;
   border-top: 1px solid #e0d6a6;
@@ -397,6 +488,7 @@
   align-items: center;
 }
 
+/* 보드 컨트롤 버튼 공통 스타일 */
 .board-controls button {
   padding: 4px 8px;
   font-size: 0.8rem;
@@ -406,21 +498,25 @@
   cursor: pointer;
 }
 
+/* 강조용(primary) 버튼 (필요시 사용) */
 .board-controls button.primary {
   background: #4a7bd4;
   color: #fff;
   border-color: #4a7bd4;
 }
 
+/* ON 상태 토글 버튼 (노랑색 배경) */
 .board-controls button.toggle-on {
   background: #ffcc66;
   border-color: #e0a944;
 }
 
+/* 마우스 오버 시 약간 진한 회색 */
 .board-controls button:hover {
   background: #e5e5e5;
 }
 
+/* 색상 선택 input (작은 정사각형 색상 박스) */
 .board-controls input[type="color"] {
   width: 32px;
   height: 22px;
@@ -428,12 +524,18 @@
   border: none;
 }
 
+/* 슬라이더(펜 굵기, 지우개 크기) 세로 정렬 */
 .board-controls input[type="range"] {
   vertical-align: middle;
 }
 
 /* ============= 오른쪽: 채팅 + 공유 메모 ============= */
 
+/* 
+  오른쪽 패널 전체
+  - 위: 채팅
+  - 아래: 공유 메모
+*/
 .right-side {
   flex: 1.2;
   padding: 8px 16px 8px 8px;
@@ -442,7 +544,7 @@
   min-width: 260px;
 }
 
-/* 채팅 패널 */
+/* 채팅 패널 전체 박스 */
 .chat-panel {
   flex: 2;
   display: flex;
@@ -450,12 +552,17 @@
   margin-bottom: 8px;
 }
 
+/* "채팅 화면" 타이틀 */
 .chat-title {
   font-weight: 600;
   margin-bottom: 4px;
   font-size: 0.9rem;
 }
 
+/* 
+  채팅 메시지가 쌓이는 영역
+  - 내부 스크롤 가능
+*/
 .chat-window {
   flex: 1;
   border: 1px solid #ccc;
@@ -466,7 +573,7 @@
   font-size: 0.85rem;
 }
 
-/* 입력창 + 버튼 묶음 */
+/* 입력창 + 오른쪽 버튼 묶음 한 줄 */
 .chat-input-row {
   display: flex;
   flex-direction: row;
@@ -474,7 +581,10 @@
   margin-top: 6px;
 }
 
-/* 채팅 입력창 */
+/* 
+  채팅 입력 textarea
+  - 세로로 늘릴 수 있도록 resize: vertical
+*/
 .chat-input {
   flex: 1;
   min-height: 120px;
@@ -486,7 +596,10 @@
   box-sizing: border-box;
 }
 
-/* 오른쪽 버튼 묶음 */
+/* 
+  채팅 입력 오른쪽에 세로로 쌓이는 버튼 그룹
+  - 색 선택, 글자 크기 선택, 전송 버튼
+*/
 .chat-buttons {
   display: flex;
   flex-direction: column;
@@ -494,6 +607,7 @@
   gap: 6px;
 }
 
+/* 채팅 글자 색 선택 input */
 .chat-color-picker {
   width: 100%;
   height: 32px;
@@ -503,6 +617,7 @@
   cursor: pointer;
 }
 
+/* 전송 버튼 */
 .chat-send-btn {
   width: 100%;
   height: 32px;
@@ -518,43 +633,48 @@
   background: #3862af;
 }
 
-/* 시스템 메시지 스타일 */
+/* 시스템 메시지 (입장/퇴장 알림) 스타일 */
 .chat-message.system {
   color: #777;
   font-style: italic;
 }
 
-/* 공유 메모 (리치 텍스트) */
+/* ============= 공유 메모 (리치 텍스트) ============= */
+
+/* 공유 메모 전체 영역 */
 .notes-panel {
   flex: 1;
   display: flex;
   flex-direction: column;
-  /* 추가: 안쪽 요소가 스크롤 될 수 있도록 */
+  /* 내부가 flex여도 스크롤 가능하게 하기 위해 min-height:0 */
   min-height: 0;
 }
 
+/* "공유 메모" 제목 */
 .notes-title {
   font-weight: 600;
   font-size: 0.9rem;
   margin-bottom: 4px;
 }
 
+/* 
+  실제 글을 입력하는 리치 텍스트 영역
+  - contentEditable div
+*/
 .notes-editor {
   flex: 1;
-  /* 기존 min-height는 없애거나 0으로 변경 */
-  /* min-height: 80px;  <= 있으면 지우거나 주석 처리 */
+  /* 예전 min-height를 없애서 내부 스크롤만 적용 */
   min-height: 0;
   border-radius: 6px;
   border: 1px solid #ccc;
   padding: 6px;
   font-size: 0.85rem;
   background: #ffffff;
-  /* 세로 스크롤은 이 div 안에서만 */
-  overflow-y: auto;
+  overflow-y: auto; /* 메모 내용이 길어지면 이 안에서 스크롤 */
   overflow-x: hidden;
 }
 
-/* 공유 메모 툴바 전체를 가로 배치 */
+/* 공유 메모 툴바 전체 줄 (B/I/U/S, 색상, size 등) */
 .notes-toolbar {
   display: flex;
   align-items: center;
@@ -563,14 +683,14 @@
   font-size: 12px;
 }
 
-/* 왼쪽 그룹: B/I/U/S + 색상 */
+/* 왼쪽 툴바 그룹 (B/I/U/S + 색상) */
 .notes-toolbar-left {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-/* 오른쪽 그룹: size 를 맨 오른쪽으로 밀기 */
+/* 오른쪽 툴바 그룹 (size 선택을 오른쪽 끝으로) */
 .notes-toolbar-right {
   margin-left: auto; /* 오른쪽 끝으로 밀기 */
   display: flex;
@@ -578,18 +698,19 @@
   gap: 4px;
 }
 
-/* 기존 색상 라벨이 있다면 그대로 사용해도 됨 */
+/* 색상 선택 라벨 + 색상 인풋 묶음 */
 .notes-color-label {
   display: flex;
   align-items: center;
   gap: 2px;
 }
 
-/* size 라벨도 살짝 정렬 */
+/* size 글자를 정렬 */
 .notes-size-label {
   display: inline-block;
 }
 
+/* 툴바 버튼 공통 스타일 (B/I/U/S) */
 .notes-toolbar button {
   padding: 2px 6px;
   font-size: 0.8rem;
@@ -603,19 +724,22 @@
   background: #e5e5e5;
 }
 
+/* 선택된 서식(B/I/U/S) 버튼 강조 (보드 ON과 같은 색) */
 .notes-toolbar button.active {
-  background-color: #ffcc66; /* 보드 필기 ON 과 같은 배경색 */
-  border-color: #e0a944; /* 보드 필기 ON 과 같은 테두리 색 */
+  background-color: #ffcc66;
+  border-color: #e0a944;
   color: #333;
 }
 
+/* size 라벨 폰트 크기 */
 .notes-size-label {
-  font-size: 0.8rem; /* 색상 라벨과 동일 */
+  font-size: 0.8rem;
   display: flex;
   align-items: center;
   margin-left: 4px;
 }
 
+/* 메모 툴바의 색상 선택 박스 크기 */
 .notes-color-label input[type="color"] {
   width: 24px;
   height: 22px;
@@ -623,12 +747,15 @@
   border: none;
 }
 
-/* 퇴장한 유저 타일 */
+/* 퇴장한 유저의 비디오 타일(회색 처리) */
 .video-panel.offline {
   background: #d0d0d0;
 }
 
-/* 오프라인 안내 텍스트 */
+/* 
+  연결 종료된 유저 타일에 표시되는 텍스트
+  - "연결 종료" 라고 중앙에 안내
+*/
 .video-offline-text {
   width: 100%;
   height: 100%;
